@@ -28,5 +28,13 @@ putenv("VIEW_COMPILED_PATH={$storagePath}/framework/views");
 $_ENV['VIEW_COMPILED_PATH'] = "{$storagePath}/framework/views";
 $_SERVER['VIEW_COMPILED_PATH'] = "{$storagePath}/framework/views";
 
+putenv("APP_PACKAGES_CACHE={$storagePath}/bootstrap/cache/packages.php");
+$_ENV['APP_PACKAGES_CACHE'] = "{$storagePath}/bootstrap/cache/packages.php";
+$_SERVER['APP_PACKAGES_CACHE'] = "{$storagePath}/bootstrap/cache/packages.php";
+
+putenv("APP_SERVICES_CACHE={$storagePath}/bootstrap/cache/services.php");
+$_ENV['APP_SERVICES_CACHE'] = "{$storagePath}/bootstrap/cache/services.php";
+$_SERVER['APP_SERVICES_CACHE'] = "{$storagePath}/bootstrap/cache/services.php";
+
 // 3. Delegate to Laravel public entrypoint
 require __DIR__ . '/../public/index.php';

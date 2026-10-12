@@ -9,3 +9,5 @@ phpunit.xml
 composer.phar
 .php
 README.md
+bootstrap/cache/*.php
+storage/
