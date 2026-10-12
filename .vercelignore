@@ -1,0 +1,11 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+tests
+phpunit.xml
+.phpunit.result.cache
+composer.phar
+.php
+README.md

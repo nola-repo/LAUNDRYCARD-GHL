@@ -16,6 +16,20 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 // Provider redirect target. Guarded by single-use OAuth state, not by session.
 Route::get('/oauth/ghl/callback', [OAuthController::class, 'callback'])->middleware('throttle:20,1')->name('oauth.callback');
 
+// Vercel Cron trigger for customer discovery (guarded by CRON_SECRET)
+Route::get('/api/cron/discovery', function (\Illuminate\Http\Request $request) {
+    $secret = env('CRON_SECRET');
+    if (!empty($secret)) {
+        $auth = $request->header('Authorization');
+        $queryToken = $request->query('token');
+        if ($auth !== "Bearer {$secret}" && $queryToken !== $secret) {
+            abort(403, 'Unauthorized cron execution');
+        }
+    }
+    \Illuminate\Support\Facades\Artisan::call('integration:discover');
+    return response()->json(['status' => 'ok', 'message' => 'Discovery triggered successfully']);
+})->name('cron.discovery');
+
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/', [DashboardController::class, 'overview'])->name('overview');
     Route::get('/installations', [DashboardController::class, 'installations'])->name('installations');
