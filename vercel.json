@@ -31,11 +31,5 @@
       "src": "/(.*)",
       "dest": "/api/index.php"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/discovery",
-      "schedule": "*/15 * * * *"
-    }
   ]
 }
