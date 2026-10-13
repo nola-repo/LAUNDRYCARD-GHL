@@ -14,7 +14,8 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // Provider redirect target. Guarded by single-use OAuth state, not by session.
-Route::get('/oauth/ghl/callback', [OAuthController::class, 'callback'])->middleware('throttle:20,1')->name('oauth.callback');
+Route::get('/oauth/callback', [OAuthController::class, 'callback'])->middleware('throttle:20,1')->name('oauth.callback');
+Route::get('/oauth/ghl/callback', [OAuthController::class, 'callback'])->middleware('throttle:20,1');
 
 // Vercel Cron trigger for customer discovery (guarded by CRON_SECRET)
 Route::get('/api/cron/discovery', function (\Illuminate\Http\Request $request) {
