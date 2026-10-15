@@ -139,6 +139,8 @@ class LaundryCardClient
             'name' => $this->field($json, 'Name'),
             'email' => Normalizer::email($this->field($json, 'Email')),
             'phone' => $this->field($json, 'Phone'),
+            'balance' => $this->normalizeBalance($this->field($json, 'Balance')),
+            'balance_present' => $this->hasField($json, 'Balance'),
         ];
     }
 
@@ -282,8 +284,30 @@ class LaundryCardClient
             'status' => $r['Status'] ?? null,
             'source_timestamp' => $ts,
             'email' => Normalizer::email($this->field($r, 'Email')),
-            // Balances / loyalty values are intentionally dropped.
+            // CCI documents Balance as the card's dollar balance (decimal).
+            'balance' => $this->normalizeBalance($this->field($r, 'Balance')),
+            'balance_present' => $this->hasField($r, 'Balance'),
         ];
+    }
+
+    private function normalizeBalance(mixed $value): ?string
+    {
+        if (! is_numeric($value) || ! is_finite((float) $value)) {
+            return null;
+        }
+
+        return number_format((float) $value, 2, '.', '');
+    }
+
+    private function hasField(array $row, string $name): bool
+    {
+        foreach (array_keys($row) as $key) {
+            if (strcasecmp((string) $key, $name) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function field(array $row, string $name): mixed

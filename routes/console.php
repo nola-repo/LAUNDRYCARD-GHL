@@ -13,9 +13,3 @@ Schedule::command('integration:discover')
     ->cron('*/'.max(1, (int) config('integration.discovery.schedule_every_minutes')).' * * * *')
     ->withoutOverlapping(30)
     ->onOneServer();
-
-// Optional fallback when no persistent queue worker (supervisor) is available.
-Schedule::command('queue:work --stop-when-empty --max-time=55 --tries=1')->everyMinute()->withoutOverlapping(2);
-
-Schedule::command('queue:prune-failed --hours=720')->daily();
-

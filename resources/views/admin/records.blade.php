@@ -2,7 +2,7 @@
 @section('title','Customer Records')
 @section('content')
 <h1>Incoming Customer Records</h1>
-<p class="sub">Sanitized view: email and phone are masked; full values stay encrypted in the database.</p>
+<p class="sub">Persisted LaundryCard observations and backend decisions. Card and customer identifiers are masked; encrypted customer values remain in the database.</p>
 
 <form class="filters" method="get">
   <select name="store"><option value="">All stores</option>@foreach($stores as $s)<option value="{{ $s->store_id }}" @selected(request('store')===$s->store_id)>{{ $s->store_id }} {{ $s->name }}</option>@endforeach</select>
@@ -14,17 +14,17 @@
 </form>
 
 <div class="card" style="overflow:auto"><table>
-  <tr><th>Store</th><th>Card / account</th><th>Customer</th><th>Source time</th><th>First observed</th><th>Classification</th><th>Status</th><th>Destination GHL location</th><th>GHL contact ID</th></tr>
+  <tr><th>Store</th><th>Card / account</th><th>Customer</th><th>Balance</th><th>Eligibility</th><th>Source time</th><th>First observed</th><th>Routing / sync</th><th>GHL contact ID</th></tr>
   @forelse($records as $r)
   <tr>
     <td class="mono">{{ $r->store->store_id }}</td>
-    <td class="mono">{{ $r->card_number }}</td>
+    <td class="mono">{{ substr($r->card_number,0,2) }}••••{{ substr($r->card_number,-2) }}</td>
     <td>{{ $r->customer_name ? \Illuminate\Support\Str::limit($r->customer_name,1,'').'***' : '—' }}<div class="muted" style="font-size:11px">{{ \App\Support\Sanitizer::maskEmail($r->customer_email) }} {{ \App\Support\Sanitizer::maskPhone($r->customer_phone) }}</div></td>
+    <td>{{ $r->balance !== null ? '$'.number_format((float)$r->balance,2) : 'unknown' }}</td>
+    <td><x-badge :value="$r->eligibility_status"/>@if($r->eligibility_reason)<div class="muted" style="font-size:11px">{{ $r->eligibility_reason }}</div>@endif</td>
     <td>{{ $r->source_timestamp?->toDateTimeString() ?? '—' }}</td>
     <td>{{ $r->first_observed_at->toDateTimeString() }}</td>
-    <td><x-badge :value="$r->classification"/></td>
-    <td><x-badge :value="$r->processing_status"/>@if($r->hold_reason)<div class="muted" style="font-size:11px">{{ $r->hold_reason }}</div>@endif</td>
-    <td class="mono">{{ $r->destination_location_id ?? '—' }}</td>
+    <td><x-badge :value="$r->processing_status"/>@if($r->hold_reason)<div class="muted" style="font-size:11px">{{ $r->hold_reason }}</div>@endif<div class="muted mono" style="font-size:11px">{{ $r->destination_location_id ?? 'unmapped' }}</div></td>
     <td class="mono">{{ $r->contactMapping?->ghl_contact_id ?? '—' }}</td>
   </tr>
   @empty<tr><td colspan="9" class="muted">No records match.</td></tr>@endforelse

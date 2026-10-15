@@ -25,6 +25,13 @@ class LaundrycardSourceRecord extends Model
     public const SKIPPED = 'skipped';
     public const FAILED = 'failed';
 
+    // Balance eligibility is independent from discovery/classification.
+    public const BALANCE_UNKNOWN = 'pending_balance_verification';
+    public const BALANCE_INVALID = 'invalid_balance';
+    public const BALANCE_ZERO = 'ineligible_zero_balance';
+    public const BALANCE_NEGATIVE = 'ineligible_negative_balance';
+    public const BALANCE_ELIGIBLE = 'eligible';
+
     protected $guarded = [];
 
     protected $hidden = ['customer_name', 'customer_email', 'customer_phone'];
@@ -37,6 +44,7 @@ class LaundrycardSourceRecord extends Model
             'last_observed_at' => 'datetime',
             'last_attempt_at' => 'datetime',
             'synced_at' => 'datetime',
+            'balance' => 'decimal:2',
             'customer_name' => 'encrypted',
             'customer_email' => 'encrypted',
             'customer_phone' => 'encrypted',

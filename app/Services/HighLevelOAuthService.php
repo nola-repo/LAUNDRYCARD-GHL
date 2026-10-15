@@ -21,8 +21,10 @@ use Throwable;
  */
 class HighLevelOAuthService
 {
-    public function __construct(private IntegrationLogger $logger)
-    {
+    public function __construct(
+        private IntegrationLogger $logger,
+        private BranchMappingService $branchMapper,
+    ) {
     }
 
     public function isConfigured(): bool
@@ -109,8 +111,19 @@ class HighLevelOAuthService
         // 4. persist
         $connection = $this->persist($data);
 
-        // 5. identify
+        // 5. identify (best-effort; failure is non-fatal)
         $this->identifyLocation($connection);
+
+        // 6. auto-map to the best-matching LaundryCard store (fully automated)
+        try {
+            $this->branchMapper->autoMapConnection($connection->fresh());
+        } catch (Throwable $e) {
+            $this->logger->log('mapping.auto', [
+                'level'           => 'warning',
+                'ghl_location_id' => $connection->location_id,
+                'message'         => 'Auto-map attempt failed after install: '.\App\Support\Sanitizer::string($e->getMessage(), 200),
+            ]);
+        }
 
         return $connection->refresh();
     }
@@ -270,7 +283,7 @@ class HighLevelOAuthService
             $this->logger->log('oauth.install', [
                 'outcome' => $event,
                 'ghl_location_id' => $connection->location_id,
-                'message' => "Location {$event}; awaiting branch assignment if unmapped.",
+                'message' => "Location {$event}; automatic routing requires an exact configured branch association.",
                 'context' => ['scopes' => $connection->scopes, 'install_count' => $connection->install_count],
             ]);
 

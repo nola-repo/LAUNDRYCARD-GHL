@@ -8,7 +8,6 @@ use App\Models\LaundrycardSourceRecord as Rec;
 use App\Models\LaundrycardStore;
 use App\Models\SyncRun;
 use App\Support\Normalizer;
-use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Throwable;
@@ -19,13 +18,13 @@ use Throwable;
  * Research result (CCI docs): no customer-created webhook, no incremental/"since" filter,
  * no documented pagination on /api/cards, and the card "Timestamp" is not documented as a
  * creation time. We therefore poll each accessible store, diff against persistent state and
- * only treat a card as a *confirmed* new customer when it appeared after the store baseline
- * AND carries a source timestamp on/after that baseline.
+ * Balance eligibility is evaluated on every observation. LaundryCard's card Timestamp is
+ * retained for monitoring only; its documentation does not define it as customer creation.
  */
 class CustomerDiscoveryService
 {
     /** Hold reasons that are released automatically once routing becomes possible. */
-    public const RELEASABLE_HOLDS = ['no_mapping', 'mapping_not_verified', 'connection_unusable'];
+    public const RELEASABLE_HOLDS = ['no_mapping', 'mapping_not_verified', 'connection_unusable', 'sync_disabled'];
 
     public function __construct(
         private LaundryCardClient $client,
@@ -53,7 +52,7 @@ class CustomerDiscoveryService
         }
 
         $stats = ['stores_scanned' => 0, 'stores_failed' => 0, 'cards_seen' => 0, 'new_records' => 0,
-            'baseline_records' => 0, 'confirmed_new' => 0, 'held' => 0, 'queued' => 0, 'stores' => []];
+            'baseline_records' => 0, 'held' => 0, 'queued' => 0, 'stores' => []];
 
         try {
             if (! $readOnly) {
@@ -67,7 +66,7 @@ class CustomerDiscoveryService
                 try {
                     $res = $this->scanStore($store, $readOnly);
                     $stats['stores_scanned']++;
-                    foreach (['cards_seen', 'new_records', 'baseline_records', 'confirmed_new', 'held'] as $k) {
+                    foreach (['cards_seen', 'new_records', 'baseline_records', 'held'] as $k) {
                         $stats[$k] += $res[$k];
                     }
                     $stats['stores'][$store->store_id] = $res;
@@ -103,62 +102,56 @@ class CustomerDiscoveryService
     public function scanStore(LaundrycardStore $store, bool $readOnly): array
     {
         $cards = $this->client->cards($store->store_id);
-        $res = ['cards_seen' => count($cards), 'new_records' => 0, 'baseline_records' => 0, 'confirmed_new' => 0, 'held' => 0];
+        $res = ['cards_seen' => count($cards), 'new_records' => 0, 'baseline_records' => 0, 'held' => 0];
 
         $isBaseline = $store->baseline_completed_at === null;
         if ($isBaseline && ! $readOnly && $store->baseline_started_at === null) {
             $store->update(['baseline_started_at' => now()]);
         }
-        $threshold = ($store->baseline_started_at ?? now())->copy()->subMinutes((int) config('integration.discovery.timestamp_grace_minutes'));
-        $importBaseline = config('integration.discovery.initial_import') === 'import';
-
         $existing = Rec::where('laundrycard_store_id', $store->id)->pluck('id', 'card_number');
 
         foreach ($cards as $card) {
             if ($existing->has($card['card_number'])) {
                 if (! $readOnly) {
-                    Rec::where('id', $existing[$card['card_number']])->update([
-                        'last_observed_at' => now(), 'source_timestamp' => $card['source_timestamp'],
-                    ]);
+                    $record = Rec::find($existing[$card['card_number']]);
+                    if ($record) {
+                        $this->observe($store, $record, $card);
+                    }
                 }
 
                 continue;
             }
 
-            [$classification, $status, $hold] = $this->classify($isBaseline, $importBaseline, $card['source_timestamp'], $threshold);
+            $classification = $isBaseline ? Rec::BASELINE : Rec::NEW_OBSERVED;
             $res['new_records']++;
             if ($classification === Rec::BASELINE) {
                 $res['baseline_records']++;
-            } elseif ($classification === Rec::CONFIRMED_NEW) {
-                $res['confirmed_new']++;
-            }
-            if ($status === Rec::HELD) {
-                $res['held']++;
             }
             if ($readOnly) {
                 continue;
             }
 
-            $customer = ['name' => null, 'email' => $card['email'], 'phone' => null];
-            // Only enrich genuinely new, importable records (never the historical baseline).
-            if ($status === Rec::PENDING && ! $isBaseline && config('integration.discovery.enrich_with_account_detail')) {
-                $customer = $this->enrich($store, $card, $customer);
-            }
-            $email = Normalizer::email($customer['email']);
-            $phone = Normalizer::phone($customer['phone']);
-            if ($status === Rec::PENDING && ! $email && ! $phone) {
-                [$status, $hold] = [Rec::SKIPPED, 'no_contact_identifier'];
-            }
-
-            Rec::firstOrCreate(
+            $record = Rec::firstOrCreate(
                 ['laundrycard_store_id' => $store->id, 'card_number' => $card['card_number']],
                 [
                     'source_timestamp' => $card['source_timestamp'], 'first_observed_at' => now(), 'last_observed_at' => now(),
-                    'classification' => $classification, 'processing_status' => $status, 'hold_reason' => $hold,
-                    'customer_name' => $customer['name'], 'customer_email' => $email, 'customer_phone' => $phone,
-                    'email_hash' => Normalizer::hash($email), 'phone_hash' => Normalizer::hash($phone),
+                    'classification' => $classification,
+                    'processing_status' => $classification === Rec::BASELINE && config('integration.discovery.initial_import') !== 'import' ? Rec::BASELINE_SKIPPED : Rec::HELD,
+                    'hold_reason' => $classification === Rec::BASELINE && config('integration.discovery.initial_import') !== 'import' ? 'initial_import_disabled' : 'balance_not_verified',
+                    'eligibility_status' => Rec::BALANCE_UNKNOWN, 'eligibility_reason' => 'balance_not_verified',
                 ]
             );
+            $this->observe(
+                $store,
+                $record,
+                $card,
+                $record->wasRecentlyCreated
+                    && $classification === Rec::BASELINE
+                    && config('integration.discovery.initial_import') !== 'import'
+            );
+            if ($record->processing_status === Rec::HELD) {
+                $res['held']++;
+            }
         }
 
         if (! $readOnly) {
@@ -172,41 +165,103 @@ class CustomerDiscoveryService
         return $res;
     }
 
-    /** @return array{0:string,1:string,2:?string} classification, status, hold reason */
-    private function classify(bool $isBaseline, bool $importBaseline, ?CarbonInterface $ts, CarbonInterface $threshold): array
+    /** Persist every balance observation and release zero-balance records when they turn positive. */
+    private function observe(LaundrycardStore $store, Rec $record, array $card, bool $deferInitialBaseline = false): void
     {
-        if ($isBaseline) {
-            return [Rec::BASELINE, $importBaseline ? Rec::PENDING : Rec::BASELINE_SKIPPED, null];
-        }
-        if ($ts && $ts->greaterThanOrEqualTo($threshold)) {
-            return [Rec::CONFIRMED_NEW, Rec::PENDING, null];
-        }
-        // New to us but no proof it is a new customer (card could pre-date us, or the API omits timestamps).
-        if (config('integration.discovery.require_timestamp_confirmation')) {
-            return [Rec::NEW_OBSERVED, Rec::HELD, 'unconfirmed_new_customer'];
+        $balance = $card['balance'] ?? null;
+        $present = (bool) ($card['balance_present'] ?? false);
+        $customer = ['name' => null, 'email' => $card['email'] ?? null, 'phone' => null];
+
+        if (
+            (! $present || $balance === null || (! $customer['email'] && ! $customer['phone']))
+            && config('integration.discovery.enrich_with_account_detail')
+        ) {
+            try {
+                $account = $this->client->account($store->store_id, $record->card_number);
+                if ($account) {
+                    $customer = $account + $customer;
+                    if ($account['balance_present'] ?? false) {
+                        $balance = $account['balance'];
+                        $present = true;
+                    }
+                }
+            } catch (IntegrationException $e) {
+                $this->logger->error('discovery.enrich', $e, ['store_id' => $store->store_id]);
+            }
         }
 
-        return [Rec::NEW_OBSERVED, Rec::PENDING, null];
-    }
-
-    private function enrich(LaundrycardStore $store, array $card, array $customer): array
-    {
-        try {
-            $acct = $this->client->account($store->store_id, $card['card_number']);
-        } catch (IntegrationException $e) {
-            $this->logger->error('discovery.enrich', $e, ['store_id' => $store->store_id]);
-
-            return $customer;
+        $previousBalance = $record->balance;
+        $previousEligibility = $record->eligibility_status;
+        if (! $present) {
+            $eligibility = Rec::BALANCE_UNKNOWN;
+            $reason = 'balance_missing';
+        } elseif ($balance === null) {
+            $eligibility = Rec::BALANCE_INVALID;
+            $reason = 'balance_invalid';
+        } elseif ((float) $balance > 0) {
+            $eligibility = Rec::BALANCE_ELIGIBLE;
+            $reason = $previousBalance !== null && (float) $previousBalance <= 0
+                ? 'balance_became_positive'
+                : 'positive_balance';
+        } elseif ((float) $balance === 0.0) {
+            $eligibility = Rec::BALANCE_ZERO;
+            $reason = 'balance_not_positive';
+        } else {
+            $eligibility = Rec::BALANCE_NEGATIVE;
+            $reason = 'balance_not_positive';
         }
-        if (! $acct) {
-            return $customer;
-        }
 
-        return [
-            'name' => $acct['name'] ?: $customer['name'],
-            'email' => $acct['email'] ?: $customer['email'],
-            'phone' => $acct['phone'] ?: $customer['phone'],
+        $email = Normalizer::email($customer['email'] ?? null);
+        $phone = Normalizer::phone($customer['phone'] ?? null);
+        $attrs = [
+            'last_observed_at' => now(),
+            'source_timestamp' => $card['source_timestamp'] ?? $record->source_timestamp,
+            'balance' => $balance,
+            'eligibility_status' => $eligibility,
+            'eligibility_reason' => $reason,
         ];
+        if ($customer['name'] ?? null) {
+            $attrs['customer_name'] = $customer['name'];
+        }
+        if ($email) {
+            $attrs['customer_email'] = $email;
+            $attrs['email_hash'] = Normalizer::hash($email);
+        }
+        if ($phone) {
+            $attrs['customer_phone'] = $phone;
+            $attrs['phone_hash'] = Normalizer::hash($phone);
+        }
+
+        $wasEligible = $previousEligibility === Rec::BALANCE_ELIGIBLE;
+        if ($eligibility === Rec::BALANCE_ELIGIBLE && ! $record->isSynced()) {
+            $historicalImportDeferred = $deferInitialBaseline || (
+                $record->classification === Rec::BASELINE
+                && config('integration.discovery.initial_import') !== 'import'
+                && $record->attempt_count === 0
+                && $record->processing_status === Rec::BASELINE_SKIPPED
+            );
+            if ($historicalImportDeferred) {
+                $attrs['processing_status'] = Rec::BASELINE_SKIPPED;
+                $attrs['hold_reason'] = 'initial_import_disabled';
+            } elseif (! $wasEligible || $record->processing_status === Rec::BASELINE_SKIPPED) {
+                $attrs['processing_status'] = Rec::PENDING;
+                $attrs['hold_reason'] = null;
+            }
+        } elseif ($eligibility !== Rec::BALANCE_ELIGIBLE && ! $record->isSynced()) {
+            $attrs['processing_status'] = Rec::HELD;
+            $attrs['hold_reason'] = $reason;
+        }
+
+        $record->update($attrs);
+        if ((string) $previousBalance !== (string) $balance || $previousEligibility !== $eligibility) {
+            $this->logger->log('eligibility.balance', [
+                'store_id' => $store->store_id,
+                'outcome' => $eligibility,
+                'message' => 'Card balance eligibility changed.',
+                'context' => ['reason' => $reason, 'processing_status' => $record->processing_status, 'hold_reason' => $record->hold_reason],
+            ]);
+        }
+
     }
 
     /**
@@ -215,6 +270,10 @@ class CustomerDiscoveryService
      */
     public function dispatchPending(?LaundrycardStore $only = null): int
     {
+        if (! config('integration.sync.enabled')) {
+            return 0;
+        }
+
         $queued = 0;
         $stores = LaundrycardStore::query()->when($only, fn ($q) => $q->whereKey($only->id))->get();
 

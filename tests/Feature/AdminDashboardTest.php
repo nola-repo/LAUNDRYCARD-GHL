@@ -53,46 +53,30 @@ class AdminDashboardTest extends TestCase
         $this->assertStringNotContainsString('super-secret-lc-password', $dev);
     }
 
-    public function test_mapping_change_requires_explicit_confirmation(): void
+    public function test_admin_pages_are_monitoring_only(): void
     {
-        $s = $this->store();
-        $c = $this->connection('LOC_A');
-        $admin = $this->admin();
-        $this->actingAs($admin)->post(route('admin.mappings.assign'), ['laundrycard_store_id' => $s->id, 'ghl_connection_id' => $c->id])->assertSessionHasErrors('confirm');
+        $this->store();
+        $this->connection('LOC_A');
+        $admin = $this->actingAs($this->admin());
+        foreach (['mappings', 'installations', 'failed', 'developer'] as $page) {
+            $html = $admin->get(route("admin.$page"))->assertOk()->getContent();
+            foreach (['Assign branch', 'Propose', 'Approve', 'Verify', 'Disconnect', 'Retry', 'Process now', 'Preview decision'] as $control) {
+                $this->assertStringNotContainsString($control, $html);
+            }
+        }
+        $admin->post('/admin/mappings/assign')->assertNotFound();
         $this->assertSame(0, BranchMapping::count());
-
-        $this->post(route('admin.mappings.assign'), ['laundrycard_store_id' => $s->id, 'ghl_connection_id' => $c->id, 'confirm' => 1])->assertSessionHas('status');
-        $m = BranchMapping::first();
-        $this->assertSame('proposed', $m->status);
-        $this->post(route('admin.mappings.verify', $m))->assertSessionHasErrors('confirm');
-        $this->assertSame('proposed', $m->fresh()->status);
-        $this->post(route('admin.mappings.verify', $m), ['confirm' => 1]);
-        $m->refresh();
-        $this->assertSame('verified', $m->status);
-        $this->assertSame($admin->id, $m->verified_by);
-        $this->assertDatabaseHas('mapping_audit_logs', ['branch_mapping_id' => $m->id, 'action' => 'verified', 'user_id' => $admin->id]);
     }
 
-    public function test_one_location_cannot_serve_two_stores_and_disable_keeps_history(): void
+    public function test_one_location_cannot_be_active_for_two_stores(): void
     {
-        $svc = app(BranchMappingService::class);
         $s1 = $this->store('0160');
         $s2 = $this->store('0679', 'Laundry Time');
         $c = $this->connection('LOC_A');
-        $svc->verify($svc->assign($s1, $c, null), null);
+        $this->verifiedMapping('0160', 'LOC_A', $s1, $c);
 
-        $this->expectException(\DomainException::class);
-        try {
-            $svc->assign($s2, $c, null);
-        } finally {
-            $m = BranchMapping::where('laundrycard_store_id', $s1->id)->first();
-            $svc->disable($m, null);
-            $this->assertSame('disabled', $m->fresh()->status);
-            $this->assertNull($m->fresh()->active_store_key);
-            $this->assertDatabaseCount('mapping_audit_logs', 3);
-            // the location may now be re-assigned elsewhere
-            $svc->assign($s2, $c, null);
-        }
+        $this->expectException(\Illuminate\Database\QueryException::class);
+        BranchMapping::create(['laundrycard_store_id' => $s2->id, 'ghl_connection_id' => $c->id, 'status' => 'verified', 'active_store_key' => $s2->id, 'active_connection_key' => $c->id]);
     }
 
     public function test_database_enforces_unique_active_mapping(): void
@@ -106,24 +90,34 @@ class AdminDashboardTest extends TestCase
         BranchMapping::create(['laundrycard_store_id' => $s->id, 'ghl_connection_id' => $c2->id, 'status' => 'verified', 'active_store_key' => $s->id, 'active_connection_key' => $c2->id]);
     }
 
-    public function test_suggestions_are_only_suggestions(): void
+    public function test_exact_configured_pair_is_mapped_only_after_oauth_registration(): void
     {
         $svc = app(BranchMappingService::class);
         $store = $this->store('0160', 'The Laundry Room');
-        $this->connection('LOC_A', 'Laundry Room of Lodi');
-        $this->connection('LOC_B', 'Sonic Suds Laundromat of Newark');
-        $s = $svc->suggest($store);
-        $this->assertSame('LOC_A', $s['connection']->location_id);
+        config(['integration.branch_location_map' => ['0160' => 'LOC_A']]);
+        $this->assertSame(0, $svc->autoMapAll());
         $this->assertSame(0, BranchMapping::count());
         $this->assertFalse($svc->resolve($store)['routable']);
+        $this->connection('LOC_A', 'Completely Different Display Name');
+        $this->assertSame(1, $svc->autoMapAll());
+        $this->assertTrue($svc->resolve($store)['routable']);
     }
 
-    public function test_routing_preview_makes_no_external_calls(): void
+    public function test_dashboard_polling_endpoint_requires_admin_and_returns_persisted_state(): void
     {
         $this->httpFake();
         $this->verifiedMapping('0160', 'LOC_A');
-        $this->actingAs($this->admin())->post(route('admin.dev.routing-preview'), ['store_id' => '160'])
-            ->assertSessionHas('result', fn ($r) => $r['data']['destination_location_id'] === 'LOC_A' && $r['data']['routable'] === true);
+        $this->get(route('admin.monitoring.updates'))->assertRedirect('/login');
+        $response = $this->actingAs($this->admin())->get(route('admin.monitoring.updates'))->assertOk();
+        $this->assertSame(4, $response->json('poll_interval_seconds'));
+        $this->assertSame('connected', $response->json('connection_state'));
+        $this->assertSame(1, $response->json('stats.mappings_verified'));
         \Illuminate\Support\Facades\Http::assertNothingSent();
+    }
+
+    public function test_cron_endpoint_fails_closed_without_the_bearer_secret(): void
+    {
+        $this->get('/api/cron/discovery')->assertUnauthorized();
+        $this->get('/api/cron/discovery', ['Authorization' => 'Bearer wrong'])->assertUnauthorized();
     }
 }

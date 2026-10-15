@@ -44,11 +44,13 @@ class DashboardController extends Controller
         return view('admin.overview', [
             'stats' => $stats,
             'lcConfigured' => $lc->isConfigured(),
+            'syncEnabled' => (bool) config('integration.sync.enabled'),
             'lastRun' => $lastRun,
             'lastDiscovery' => $lastDiscovery,
             'lastLcApi' => $lastLcApi,
             'lastSync' => Rec::whereNotNull('synced_at')->max('synced_at'),
             'recentRuns' => SyncRun::latest('id')->limit(8)->get(),
+            'recentEvents' => IntegrationEvent::latest('id')->limit(10)->get(),
         ]);
     }
 
@@ -66,24 +68,17 @@ class DashboardController extends Controller
 
     public function mappings(BranchMappingService $svc)
     {
-        $stores = LaundrycardStore::with(['mappings' => fn ($q) => $q->whereIn('status', ['proposed', 'verified'])->with('connection')])
-            ->orderBy('store_id')->get();
-        $connections = GhlConnection::orderBy('location_name')->get();
+        $stores = LaundrycardStore::with(['activeMapping.connection'])->orderBy('store_id')->get();
         $unassigned = $svc->unassignedConnections();
 
-        $rows = $stores->map(function ($s) use ($svc, $unassigned) {
-            $verified = $s->mappings->firstWhere('status', 'verified');
-            $proposed = $s->mappings->firstWhere('status', 'proposed');
-            $suggestion = (! $verified && ! $proposed) ? $svc->suggest($s, $unassigned) : null;
-
-            return ['store' => $s, 'verified' => $verified, 'proposed' => $proposed, 'suggestion' => $suggestion];
+        $rows = $stores->map(function ($store) use ($svc) {
+            return ['store' => $store, 'decision' => $svc->resolve($store)];
         });
 
         return view('admin.mappings', [
             'rows' => $rows,
-            'connections' => $connections,
             'unassigned' => $unassigned,
-            'audit' => MappingAuditLog::with(['user', 'store', 'connection'])->latest('id')->limit(15)->get(),
+            'audit' => MappingAuditLog::with(['store', 'connection'])->latest('id')->limit(15)->get(),
         ]);
     }
 
@@ -149,10 +144,40 @@ class DashboardController extends Controller
     public function developer()
     {
         return view('admin.developer', [
-            'stores' => LaundrycardStore::orderBy('store_id')->get(),
-            'testable' => Rec::with('store')->whereIn('processing_status', [Rec::BASELINE_SKIPPED, Rec::SKIPPED, Rec::HELD, Rec::PENDING, Rec::FAILED])->latest('id')->limit(100)->get(),
             'diagnostics' => IntegrationEvent::where('stage', 'like', 'api.%')->latest('id')->limit(30)->get(),
             'runs' => SyncRun::latest('id')->limit(5)->get(),
         ]);
+    }
+
+    /** Authenticated incremental feed for the monitoring dashboard. */
+    public function updates(Request $request)
+    {
+        $after = max(0, (int) $request->query('after', 0));
+        $events = IntegrationEvent::where('id', '>', $after)->orderBy('id')->limit(50)
+            ->get(['id', 'created_at', 'stage', 'level', 'outcome', 'message', 'store_id', 'ghl_location_id']);
+        $lastRun = SyncRun::where('type', 'discovery')->latest('id')->first();
+
+        return response()->json([
+            'updated_at' => now()->toIso8601String(),
+            'poll_interval_seconds' => 4,
+            'events' => $events,
+            'last_event_id' => $events->last()?->id ?? $after,
+            'connection_state' => 'connected',
+            'stats' => [
+                'branches' => LaundrycardStore::where('status', 'active')->count(),
+                'locations' => GhlConnection::count(),
+                'mappings_verified' => BranchMapping::where('status', BranchMapping::VERIFIED)->count(),
+                'unmapped' => LaundrycardStore::where('status', 'active')->whereDoesntHave('activeMapping')->count(),
+                'records' => Rec::count(),
+                'positive_balance' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->count(),
+                'zero_balance' => Rec::where('eligibility_status', Rec::BALANCE_ZERO)->count(),
+                'balance_unknown' => Rec::whereIn('eligibility_status', [Rec::BALANCE_UNKNOWN, Rec::BALANCE_INVALID])->count(),
+                'eligible_pending' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->whereIn('processing_status', [Rec::PENDING, Rec::QUEUED])->count(),
+                'created' => Rec::where('processing_status', Rec::SYNCED_CREATED)->count(),
+                'updated' => Rec::where('processing_status', Rec::SYNCED_UPDATED)->count(),
+                'failed' => Rec::where('processing_status', Rec::FAILED)->count(),
+                'last_discovery' => $lastRun?->finished_at?->toIso8601String(),
+            ],
+        ])->header('Cache-Control', 'no-store, private');
     }
 }

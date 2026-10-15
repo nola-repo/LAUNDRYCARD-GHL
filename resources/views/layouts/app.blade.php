@@ -16,7 +16,7 @@
     <div class="brand"><i>⇄</i> Integration Console</div>
     <nav class="nav">
       @php
-        $items = ['overview'=>'Overview','installations'=>'OAuth Installations','mappings'=>'Branch Mapping','records'=>'Customer Records','logs'=>'Integration Logs','failed'=>'Failed Jobs','developer'=>'Developer Controls'];
+        $items = ['overview'=>'Overview','installations'=>'OAuth Installations','mappings'=>'Branch Mapping','records'=>'Customer Records','logs'=>'Integration Logs','failed'=>'Failed Activity','developer'=>'API Activity'];
         $failedCount = \App\Models\LaundrycardSourceRecord::whereIn('processing_status',['failed'])->count();
       @endphp
       @foreach($items as $r=>$label)

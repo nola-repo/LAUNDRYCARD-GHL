@@ -17,7 +17,7 @@ class DiscoverCustomers extends Command
         $stats = $run->stats ?? [];
 
         $this->info("Discovery {$run->status} (mode: {$run->mode})");
-        foreach (['stores_scanned', 'stores_failed', 'cards_seen', 'new_records', 'baseline_records', 'confirmed_new', 'held', 'queued'] as $k) {
+        foreach (['stores_scanned', 'stores_failed', 'cards_seen', 'new_records', 'baseline_records', 'held', 'queued'] as $k) {
             $this->line(str_pad($k, 18).($stats[$k] ?? 0));
         }
         if ($run->error) {

@@ -53,7 +53,7 @@ class DiscoveryAndSyncTest extends TestCase
         $this->assertSame(['0160', '0679'], LaundrycardStore::orderBy('store_id')->pluck('store_id')->all()); // leading zeros preserved
         $this->assertCount(2, app(BranchMappingService::class)->unmappedStores());
         $this->assertSame(0, \App\Models\BranchMapping::count());
-        $this->assertTrue(IntegrationEvent::where('stage', 'stores.discovered')->where('outcome', 'unmapped')->exists());
+        $this->assertTrue(IntegrationEvent::where('stage', 'stores.discovered')->where('outcome', 'new')->exists());
     }
 
     public function test_initial_discovery_baselines_without_importing_history(): void
@@ -66,7 +66,7 @@ class DiscoveryAndSyncTest extends TestCase
         $run = app(CustomerDiscoveryService::class)->run();
 
         $this->assertSame('completed', $run->status);
-        $this->assertSame(2, Rec::where('processing_status', Rec::BASELINE_SKIPPED)->count());
+        $this->assertSame(2, Rec::where('processing_status', Rec::BASELINE_SKIPPED)->count(), json_encode(IntegrationEvent::where('stage','eligibility.balance')->get(['outcome','context'])->toArray()));
         $this->assertSame(0, Rec::where('processing_status', Rec::PENDING)->count());
         $this->assertCount(0, $this->ghlSent(), 'Historical customers must not reach GHL.');
         $this->assertNotNull(LaundrycardStore::first()->baseline_completed_at);
@@ -88,7 +88,7 @@ class DiscoveryAndSyncTest extends TestCase
         $svc->run();
 
         $rec = Rec::where('card_number', '444')->firstOrFail();
-        $this->assertSame(Rec::CONFIRMED_NEW, $rec->classification);
+        $this->assertSame(Rec::NEW_OBSERVED, $rec->classification);
         $this->assertSame(Rec::SYNCED_CREATED, $rec->processing_status);
         $this->assertSame('LOC_B', $rec->destination_location_id);
 
@@ -117,26 +117,27 @@ class DiscoveryAndSyncTest extends TestCase
         $this->assertSame('no_mapping', $rec->hold_reason);
         $this->assertCount(0, $this->ghlSent());
 
-        // Once an admin verifies the mapping the held record is released.
+        // A newly configured exact association is resolved by the backend.
         $store = LaundrycardStore::where('store_id', '0679')->first();
-        $m = app(BranchMappingService::class)->assign($store, GhlConnection::first(), null);
-        app(BranchMappingService::class)->verify($m, null);
+        config(['integration.branch_location_map' => ['0679' => 'LOC_A']]);
+        app(BranchMappingService::class)->autoMapAll();
         $this->httpFake($this->ghlFake());
         app(CustomerDiscoveryService::class)->dispatchPending($store);
         $this->assertSame(Rec::SYNCED_CREATED, $rec->fresh()->processing_status);
         $this->assertSame('LOC_A', $rec->fresh()->destination_location_id);
     }
 
-    public function test_proposed_mapping_does_not_route(): void
+    public function test_unknown_branch_is_never_auto_mapped_by_similar_names(): void
     {
-        $store = $this->store();
-        app(BranchMappingService::class)->assign($store, $this->connection('LOC_A'), null);
+        $store = $this->store('0160', 'Laundry Room');
+        $this->connection('LOC_A', 'Laundry Room of Lodi');
         $d = app(BranchMappingService::class)->resolve($store);
         $this->assertFalse($d['routable']);
-        $this->assertSame('mapping_not_verified', $d['reason']);
+        $this->assertSame('no_mapping', $d['reason']);
+        $this->assertSame(0, app(BranchMappingService::class)->autoMapAll());
     }
 
-    public function test_unconfirmed_new_cards_without_timestamp_proof_are_held_for_review(): void
+    public function test_positive_balance_qualifies_even_when_source_timestamp_is_old(): void
     {
         $this->verifiedMapping('0160', 'LOC_A');
         $cards = ['0160' => [$this->card('1', 'a@example.test', '2020-01-01T00:00:00Z')]];
@@ -150,8 +151,67 @@ class DiscoveryAndSyncTest extends TestCase
 
         $rec = Rec::where('card_number', '2')->first();
         $this->assertSame(Rec::NEW_OBSERVED, $rec->classification);
-        $this->assertSame(Rec::HELD, $rec->processing_status);
-        $this->assertSame('unconfirmed_new_customer', $rec->hold_reason);
+        $this->assertSame(Rec::SYNCED_CREATED, $rec->processing_status);
+        $this->assertSame(Rec::BALANCE_ELIGIBLE, $rec->eligibility_status);
+        $this->assertSame('LOC_A', $rec->destination_location_id);
+    }
+
+    public function test_balance_states_are_fail_closed_and_zero_to_positive_is_reconsidered(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $zero = $this->card('zero', 'zero@example.test'); $zero['Balance'] = 0;
+        $negative = $this->card('negative', 'negative@example.test'); $negative['Balance'] = -2.25;
+        $missing = $this->card('missing', 'missing@example.test'); unset($missing['Balance']);
+        $invalid = $this->card('invalid', 'invalid@example.test'); $invalid['Balance'] = 'not-money';
+        $cards = ['0160' => [$zero, $negative, $missing, $invalid]];
+        $stores = [['ID' => 160, 'Name' => 'The Laundry Room']];
+        $this->httpFake($this->lcFake($stores, $cards) + $this->ghlFake());
+        $svc = app(CustomerDiscoveryService::class);
+        $svc->run();
+
+        $this->assertSame(Rec::BALANCE_ZERO, Rec::where('card_number', 'zero')->value('eligibility_status'));
+        $this->assertSame(Rec::BALANCE_NEGATIVE, Rec::where('card_number', 'negative')->value('eligibility_status'));
+        $this->assertSame(Rec::BALANCE_UNKNOWN, Rec::where('card_number', 'missing')->value('eligibility_status'));
+        $this->assertSame(Rec::BALANCE_INVALID, Rec::where('card_number', 'invalid')->value('eligibility_status'));
+        $this->assertCount(0, $this->ghlSent());
+
+        $zero['Balance'] = 15.25;
+        $cards['0160'][0] = $zero;
+        $this->httpFake($this->lcFake($stores, $cards) + $this->ghlFake());
+        $svc->run();
+
+        $record = Rec::where('card_number', 'zero')->firstOrFail();
+        $this->assertSame(Rec::BALANCE_ELIGIBLE, $record->eligibility_status);
+        $this->assertSame('15.25', (string) $record->balance);
+        $this->assertSame(Rec::SYNCED_CREATED, $record->processing_status);
+        $this->assertSame(1, Rec::whereIn('processing_status', [Rec::SYNCED_CREATED, Rec::SYNCED_UPDATED])->count());
+    }
+
+    public function test_sync_service_rejects_zero_or_unknown_balances_even_when_queued(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $record = $this->pendingRecord('never-send', 'no-send@example.test');
+        $record->update(['balance' => '0.00', 'eligibility_status' => Rec::BALANCE_ZERO]);
+        $this->httpFake($this->ghlFake());
+
+        $result = app(ContactSyncService::class)->process($record->fresh());
+
+        $this->assertSame('held_balance_ineligible', $result['outcome']);
+        $this->assertSame(Rec::HELD, $record->fresh()->processing_status);
+        $this->assertCount(0, $this->ghlSent());
+    }
+
+    public function test_real_contact_writes_remain_disabled_until_explicitly_enabled(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $record = $this->pendingRecord('disabled', 'disabled@example.test');
+        config(['integration.sync.enabled' => false]);
+        $this->httpFake($this->ghlFake());
+
+        $result = app(ContactSyncService::class)->process($record);
+
+        $this->assertSame('held_sync_disabled', $result['outcome']);
+        $this->assertSame('sync_disabled', $record->fresh()->hold_reason);
         $this->assertCount(0, $this->ghlSent());
     }
 
@@ -345,6 +405,7 @@ class DiscoveryAndSyncTest extends TestCase
         return Rec::create([
             'laundrycard_store_id' => $store->id, 'card_number' => $card, 'first_observed_at' => now(), 'last_observed_at' => now(),
             'classification' => Rec::CONFIRMED_NEW, 'processing_status' => Rec::PENDING,
+            'balance' => '12.50', 'eligibility_status' => Rec::BALANCE_ELIGIBLE, 'eligibility_reason' => 'positive_balance',
             'customer_name' => $name, 'customer_email' => $e, 'customer_phone' => $p,
             'email_hash' => \App\Support\Normalizer::hash($e), 'phone_hash' => \App\Support\Normalizer::hash($p),
         ]);

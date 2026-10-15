@@ -22,6 +22,9 @@ trait IntegrationHelpers
             'integration.ghl.client_secret' => 'client-secret-SHOULD-NEVER-LEAK',
             'integration.ghl.redirect_uri' => 'https://app.example.test/oauth/ghl/callback',
             'integration.discovery.initial_import' => 'skip',
+            'integration.branch_location_map' => [],
+            'integration.sync.enabled' => true,
+            'integration.cron_secret' => 'test-cron-secret-for-feature-tests',
         ]);
     }
 
@@ -61,10 +64,15 @@ trait IntegrationHelpers
     {
         $store ??= LaundrycardStore::where('store_id', $storeId)->first() ?? $this->store($storeId);
         $conn ??= GhlConnection::where('location_id', $locationId)->first() ?? $this->connection($locationId);
-        $svc = app(BranchMappingService::class);
-        $m = $svc->assign($store, $conn, null);
-
-        return $svc->verify($m, null);
+        return BranchMapping::create([
+            'laundrycard_store_id' => $store->id,
+            'ghl_connection_id' => $conn->id,
+            'status' => BranchMapping::VERIFIED,
+            'origin' => 'test_fixture',
+            'verified_at' => now(),
+            'active_store_key' => $store->id,
+            'active_connection_key' => $conn->id,
+        ]);
     }
 
     protected function lcAuthFake(): array

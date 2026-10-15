@@ -8,6 +8,16 @@
       "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/discovery",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/queue",
+      "schedule": "* * * * *"
+    }
+  ],
   "routes": [
     {
       "src": "/build/(.*)",

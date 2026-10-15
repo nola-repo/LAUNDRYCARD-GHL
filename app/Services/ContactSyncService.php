@@ -37,19 +37,48 @@ class ContactSyncService
     public function process(Rec $record, ?string $correlation = null, ?int $userId = null, ?int $syncRunId = null): array
     {
         $correlation = $this->logger->newCorrelation($correlation);
+        if ($record->exists) {
+            $record->refresh();
+        }
 
         // Idempotency: an already-synced record is never sent again.
         if ($record->isSynced() && $record->contactMapping()->exists()) {
             return $this->result('already_synced', $record->processing_status, null, $record->contactMapping->ghl_contact_id);
         }
 
+        if (! config('integration.sync.enabled')) {
+            $record->update(['processing_status' => Rec::HELD, 'hold_reason' => 'sync_disabled']);
+
+            return $this->result('held_sync_disabled', Rec::HELD, 'sync_disabled', null);
+        }
+
+        // Defense in depth: no queue job or manual retry may bypass the verified
+        // current-balance eligibility decision made by discovery.
+        if ($record->eligibility_status !== Rec::BALANCE_ELIGIBLE || $record->balance === null || (float) $record->balance <= 0) {
+            $reason = $record->eligibility_reason ?? 'balance_not_verified';
+            if (! $record->isSynced()) {
+                $record->update(['processing_status' => Rec::HELD, 'hold_reason' => $reason]);
+            }
+
+            return $this->result('held_balance_ineligible', Rec::HELD, $reason, null);
+        }
+
         // Atomic claim => only one worker can process a record at a time.
         $originalStatus = $record->processing_status; // capture before claim overwrites it
         $claimed = Rec::whereKey($record->id)
             ->whereIn('processing_status', [Rec::PENDING, Rec::QUEUED, Rec::HELD, Rec::FAILED])
+            ->where('eligibility_status', Rec::BALANCE_ELIGIBLE)
+            ->where('balance', '>', 0)
             ->update(['processing_status' => Rec::PROCESSING, 'last_attempt_at' => now(), 'attempt_count' => \DB::raw('attempt_count + 1')]);
         if (! $claimed) {
-            return $this->result('skipped_not_claimable', $record->fresh()->processing_status, 'Record is being processed or is not eligible.', null);
+            $fresh = $record->fresh();
+            if ($fresh && ($fresh->eligibility_status !== Rec::BALANCE_ELIGIBLE || $fresh->balance === null || (float) $fresh->balance <= 0)) {
+                $fresh->update(['processing_status' => Rec::HELD, 'hold_reason' => $fresh->eligibility_reason ?? 'balance_not_verified']);
+
+                return $this->result('held_balance_ineligible', Rec::HELD, $fresh->eligibility_reason, null);
+            }
+
+            return $this->result('skipped_not_claimable', $fresh?->processing_status ?? Rec::FAILED, 'Record is being processed or is not eligible.', null);
         }
         $record->refresh();
 
@@ -82,7 +111,7 @@ class ContactSyncService
                 return $this->finish($record, $attempt, Rec::SKIPPED, 'skipped', 'no_contact_identifier', 'no_contact_identifier', $base);
             }
             $scopes = $connection->scopes ?? [];
-            if ($scopes && (! in_array('contacts.write', $scopes, true) || ! in_array('contacts.readonly', $scopes, true))) {
+            if (! in_array('contacts.write', $scopes, true) || ! in_array('contacts.readonly', $scopes, true)) {
                 return $this->hold($record, $attempt, 'scope', 'missing_scope');
             }
 

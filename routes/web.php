@@ -1,8 +1,6 @@
 <?php
 
 use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Admin\DeveloperController;
-use App\Http\Controllers\Admin\MappingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OAuthController;
 use Illuminate\Support\Facades\Route;
@@ -18,18 +16,25 @@ Route::get('/oauth/callback', [OAuthController::class, 'callback'])->middleware(
 Route::get('/oauth/ghl/callback', [OAuthController::class, 'callback'])->middleware('throttle:20,1');
 
 // Vercel Cron trigger for customer discovery (guarded by CRON_SECRET)
-Route::get('/api/cron/discovery', function (\Illuminate\Http\Request $request) {
-    $secret = env('CRON_SECRET');
-    if (!empty($secret)) {
-        $auth = $request->header('Authorization');
-        $queryToken = $request->query('token');
-        if ($auth !== "Bearer {$secret}" && $queryToken !== $secret) {
-            abort(403, 'Unauthorized cron execution');
-        }
+Route::get('/api/cron/{task}', function (\Illuminate\Http\Request $request, string $task) {
+    $secret = (string) config('integration.cron_secret');
+    if ($secret === '' || ! hash_equals('Bearer '.$secret, (string) $request->header('Authorization'))) {
+        abort(401, 'Unauthorized cron execution');
     }
-    \Illuminate\Support\Facades\Artisan::call('integration:discover');
-    return response()->json(['status' => 'ok', 'message' => 'Discovery triggered successfully']);
-})->name('cron.discovery');
+    if ($task === 'discovery') {
+        $exit = \Illuminate\Support\Facades\Artisan::call('integration:discover');
+    } elseif ($task === 'queue') {
+        // Vercel does not keep a Laravel worker alive between invocations. Process
+        // at most one persisted job per bounded cron invocation.
+        $exit = \Illuminate\Support\Facades\Artisan::call('queue:work', [
+            'connection' => config('queue.default'), '--once' => true, '--tries' => 1, '--timeout' => 20,
+        ]);
+    } else {
+        abort(404);
+    }
+
+    return response()->json(['status' => $exit === 0 ? 'completed' : 'failed', 'task' => $task], $exit === 0 ? 200 : 500);
+})->whereIn('task', ['discovery', 'queue'])->name('cron.task');
 
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/', [DashboardController::class, 'overview'])->name('overview');
@@ -40,18 +45,5 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::get('/failed', [DashboardController::class, 'failed'])->name('failed');
     Route::get('/developer', [DashboardController::class, 'developer'])->name('developer');
 
-    Route::post('/installations/connect', [MappingController::class, 'connect'])->name('connect');
-    Route::post('/installations/{connection}/test', [MappingController::class, 'testConnection'])->name('connection.test');
-    Route::post('/installations/{connection}/disconnect', [MappingController::class, 'disconnect'])->name('connection.disconnect');
-
-    Route::post('/mappings/assign', [MappingController::class, 'assign'])->name('mappings.assign');
-    Route::post('/mappings/{mapping}/verify', [MappingController::class, 'verify'])->name('mappings.verify');
-    Route::post('/mappings/{mapping}/disable', [MappingController::class, 'disable'])->name('mappings.disable');
-
-    Route::post('/developer/test-laundrycard', [DeveloperController::class, 'testLaundryCard'])->name('dev.test-laundrycard');
-    Route::post('/developer/refresh-stores', [DeveloperController::class, 'refreshStores'])->name('dev.refresh-stores');
-    Route::post('/developer/scan', [DeveloperController::class, 'readOnlyScan'])->name('dev.scan');
-    Route::post('/developer/routing-preview', [DeveloperController::class, 'routingPreview'])->name('dev.routing-preview');
-    Route::post('/developer/process-test', [DeveloperController::class, 'processTestRecord'])->name('dev.process-test');
-    Route::post('/records/{record}/retry', [DeveloperController::class, 'retry'])->name('records.retry');
+    Route::get('/monitoring/updates', [DashboardController::class, 'updates'])->name('monitoring.updates');
 });
