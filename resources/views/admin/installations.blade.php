@@ -1,8 +1,15 @@
 @extends('layouts.app')
 @section('title','OAuth Installations')
 @section('content')
-<h1>OAuth Installations</h1>
-<p class="sub">Location-scoped GHL connections registered through OAuth. Tokens are encrypted and never displayed. Installations and revocations are managed by the OAuth lifecycle.</p>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1 style="margin:0">OAuth Installations</h1>
+    <p class="sub" style="margin:4px 0 0">Location-scoped GHL connections registered through OAuth. Tokens are encrypted and never displayed.</p>
+  </div>
+  <a href="{{ route('admin.connect') }}" class="btn" style="background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:6px">
+    <span>+</span> Connect GoHighLevel Location
+  </a>
+</div>
 <div class="card" style="overflow:auto">
 <table>
   <tr><th>Location ID</th><th>Name</th><th>Status</th><th>Granted scopes</th><th>Token health</th><th>Installed</th><th>Last API success</th><th>Recent errors</th><th>Mapped store</th></tr>

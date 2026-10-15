@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\MappingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OAuthController;
 use Illuminate\Support\Facades\Route;
@@ -44,6 +45,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::get('/logs', [DashboardController::class, 'logs'])->name('logs');
     Route::get('/failed', [DashboardController::class, 'failed'])->name('failed');
     Route::get('/developer', [DashboardController::class, 'developer'])->name('developer');
+
+    Route::get('/connect', [MappingController::class, 'connect'])->name('connect');
+    Route::post('/connections/{connection}/test', [MappingController::class, 'testConnection'])->name('connections.test');
+    Route::post('/connections/{connection}/disconnect', [MappingController::class, 'disconnect'])->name('connections.disconnect');
 
     Route::get('/monitoring/updates', [DashboardController::class, 'updates'])->name('monitoring.updates');
 });
