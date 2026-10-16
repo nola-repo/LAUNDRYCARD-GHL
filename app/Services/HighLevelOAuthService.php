@@ -43,13 +43,22 @@ class HighLevelOAuthService
         $state = Str::random(48);
         Cache::put($this->stateKey($state), ['user_id' => $userId, 'created_at' => now()->toIso8601String()], (int) config('integration.ghl.state_ttl_seconds'));
 
-        $q = http_build_query([
+        $clientId = (string) config('integration.ghl.client_id');
+        $versionId = config('integration.ghl.version_id') ?: (str_contains($clientId, '-') ? explode('-', $clientId)[0] : $clientId);
+
+        $params = [
             'response_type' => 'code',
             'redirect_uri' => config('integration.ghl.redirect_uri'),
-            'client_id' => config('integration.ghl.client_id'),
+            'client_id' => $clientId,
             'scope' => implode(' ', config('integration.ghl.scopes')),
             'state' => $state,
-        ], '', '&', PHP_QUERY_RFC3986);
+        ];
+
+        if (! empty($versionId)) {
+            $params['version_id'] = $versionId;
+        }
+
+        $q = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 
         return config('integration.ghl.authorize_url').'?'.$q;
     }
