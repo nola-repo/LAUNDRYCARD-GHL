@@ -30,9 +30,9 @@ return [
     |--------------------------------------------------------------------------
     */
     'ghl' => [
-        'client_id' => env('GHL_CLIENT_ID'),
-        'client_secret' => env('GHL_CLIENT_SECRET'),
-        'redirect_uri' => env('GHL_REDIRECT_URI'),
+        'client_id' => trim((string) env('GHL_CLIENT_ID'), "\xEF\xBB\xBF \t\n\r\0\x0B"),
+        'client_secret' => trim((string) env('GHL_CLIENT_SECRET'), "\xEF\xBB\xBF \t\n\r\0\x0B"),
+        'redirect_uri' => trim((string) env('GHL_REDIRECT_URI'), "\xEF\xBB\xBF \t\n\r\0\x0B"),
         'authorize_url' => env('GHL_AUTHORIZE_URL', 'https://marketplace.gohighlevel.com/oauth/chooselocation'),
         'token_url' => env('GHL_TOKEN_URL', 'https://services.leadconnectorhq.com/oauth/token'),
         'api_base' => env('GHL_API_BASE', 'https://services.leadconnectorhq.com'),
