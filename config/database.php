@@ -86,7 +86,11 @@ return [
 
         'pgsql' => [
             'driver' => 'pgsql',
-            'url' => env('DB_URL', env('DATABASE_URL_UNPOOLED', env('DATABASE_URL', env('POSTGRES_URL')))),
+            'url' => (function () {
+                $raw = env('DB_URL') ?: env('DATABASE_URL_UNPOOLED') ?: env('POSTGRES_URL_NON_POOLING') ?: env('DATABASE_URL') ?: env('POSTGRES_URL');
+
+                return $raw ? str_replace('-pooler.', '.', (string) $raw) : null;
+            })(),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
