@@ -13,10 +13,14 @@ class OAuthController extends Controller
     {
         try {
             $connection = $oauth->handleCallback($request->query());
+            $bulkCount = (int) ($connection->getAttribute('agency_bulk_install_count') ?? 0);
+            $message = $bulkCount > 0
+                ? $bulkCount.' configured GoHighLevel branch location'.($bulkCount === 1 ? '' : 's').' connected.'
+                : 'Location connected'.($connection->location_name ? ': '.$connection->location_name : '').'.';
 
             return response()->view('oauth.result', [
                 'ok' => true,
-                'message' => 'Location connected'.($connection->location_name ? ': '.$connection->location_name : '').'. An administrator must now assign a LaundryCard branch before synchronization is enabled.',
+                'message' => $message.' An administrator must now assign a LaundryCard branch before synchronization is enabled.',
             ]);
         } catch (IntegrationException $e) {
             // Details are already in integration_events; keep the browser message generic.

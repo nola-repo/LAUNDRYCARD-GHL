@@ -33,12 +33,15 @@ return [
         'client_id' => trim((string) env('GHL_CLIENT_ID'), "\xEF\xBB\xBF \t\n\r\0\x0B"),
         'client_secret' => trim((string) env('GHL_CLIENT_SECRET'), "\xEF\xBB\xBF \t\n\r\0\x0B"),
         'redirect_uri' => trim((string) env('GHL_REDIRECT_URI'), "\xEF\xBB\xBF \t\n\r\0\x0B"),
+        // Required by the agency bulk-install discovery endpoint. If omitted,
+        // the OAuth service derives it from the standard appId-clientKey ID.
+        'app_id' => trim((string) env('GHL_APP_ID'), "\xEF\xBB\xBF \t\n\r\0\x0B"),
         'authorize_url' => env('GHL_AUTHORIZE_URL', 'https://marketplace.leadconnectorhq.com/v2/oauth/chooselocation'),
         'version_id' => env('GHL_VERSION_ID'),
         'token_url' => env('GHL_TOKEN_URL', 'https://services.leadconnectorhq.com/oauth/token'),
         'api_base' => env('GHL_API_BASE', 'https://services.leadconnectorhq.com'),
         'api_version' => env('GHL_API_VERSION', '2021-07-28'),
-        'scopes' => preg_split('/[\\s,]+/', trim((string) env('GHL_SCOPES', 'contacts.readonly contacts.write locations.readonly')), -1, PREG_SPLIT_NO_EMPTY),
+        'scopes' => preg_split('/[\\s,]+/', trim((string) env('GHL_SCOPES', 'contacts.readonly contacts.write locations.readonly oauth.readonly')), -1, PREG_SPLIT_NO_EMPTY),
         'timeout' => (int) env('GHL_TIMEOUT', 20),
         'state_ttl_seconds' => 600,
         // Refresh when fewer than this many seconds remain.

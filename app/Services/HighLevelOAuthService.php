@@ -107,14 +107,19 @@ class HighLevelOAuthService
             'redirect_uri' => config('integration.ghl.redirect_uri'),
         ], 'oauth.exchange');
 
+        $userType = $data['userType'] ?? 'Location';
+        if (strcasecmp((string) $userType, 'Company') === 0) {
+            return $this->installConfiguredLocationsFromAgency($data);
+        }
+
         $locationId = $data['locationId'] ?? null;
-        if (($data['userType'] ?? 'Location') !== 'Location' || ! $locationId) {
+        if (strcasecmp((string) $userType, 'Location') !== 0 || ! $locationId) {
             $this->logger->log('oauth.exchange', [
                 'level' => 'warning', 'outcome' => 'unsupported',
-                'message' => 'Token response was not location-scoped (agency install). Install the app on a sub-account.',
-                'context' => ['user_type' => $data['userType'] ?? null],
+                'message' => 'Token response had an unsupported user type or no location ID.',
+                'context' => ['user_type' => $userType],
             ]);
-            throw new AuthorizationException('Only sub-account (Location) installations are supported.', null, 'oauth.exchange');
+            throw new AuthorizationException('The authorization did not return a supported Company or Location token.', null, 'oauth.exchange');
         }
 
         // 4. persist
@@ -135,6 +140,171 @@ class HighLevelOAuthService
         }
 
         return $connection->refresh();
+    }
+
+    /**
+     * Agency bulk installs return a Company token. Use it only to find the
+     * explicitly configured LaundryCard branches, then persist per-location
+     * tokens so the rest of the app continues to operate with location scope.
+     *
+     * @param array<string,mixed> $companyToken
+     */
+    private function installConfiguredLocationsFromAgency(array $companyToken): GhlConnection
+    {
+        $companyId = $companyToken['companyId'] ?? null;
+        $appId = $companyToken['appId'] ?? config('integration.ghl.app_id');
+        if (! $appId) {
+            $clientId = (string) config('integration.ghl.client_id');
+            $appId = str_contains($clientId, '-') ? explode('-', $clientId, 2)[0] : null;
+        }
+        if (! $companyId || ! $appId || empty($companyToken['access_token'])) {
+            throw new MalformedResponseException('Company token response is missing company or app identity.', null, 'oauth.exchange');
+        }
+
+        $configuredLocationIds = array_values(array_unique(array_filter(array_map(
+            static fn ($id) => is_scalar($id) ? trim((string) $id) : '',
+            array_values((array) config('integration.branch_location_map', [])),
+        ))));
+        if ($configuredLocationIds === []) {
+            throw new AuthorizationException('No LaundryCard branch locations are configured for this agency.', null, 'oauth.install');
+        }
+
+        $installed = [];
+        foreach ($configuredLocationIds as $locationId) {
+            if ($this->isAppInstalledAtLocation($companyToken, (string) $companyId, (string) $appId, $locationId)) {
+                $installed[] = $locationId;
+            }
+        }
+        if ($installed === []) {
+            $this->logger->log('oauth.install', [
+                'level' => 'warning', 'outcome' => 'no_configured_locations',
+                'message' => 'Company authorization succeeded, but none of the configured LaundryCard branches are installed for this app.',
+                'context' => ['company_id' => $companyId, 'checked_location_count' => count($configuredLocationIds)],
+            ]);
+            throw new AuthorizationException('The app is not installed on any configured LaundryCard branch in this agency.', null, 'oauth.install');
+        }
+
+        $connections = [];
+        foreach ($installed as $locationId) {
+            $locationToken = $this->locationTokenFromAgency($companyToken, (string) $companyId, $locationId);
+            if (empty($locationToken['access_token']) || empty($locationToken['refresh_token'])) {
+                throw new MalformedResponseException('Location token response is missing access_token or refresh_token.', null, 'oauth.location_token');
+            }
+
+            // The location-token response omits some identity fields; the
+            // Company token is the trusted source for those values.
+            $locationToken = array_merge($companyToken, $locationToken, [
+                'companyId' => $companyId,
+                'locationId' => $locationToken['locationId'] ?? $locationId,
+                'userId' => $locationToken['userId'] ?? ($companyToken['userId'] ?? null),
+                'userType' => 'Location',
+            ]);
+            if ((string) $locationToken['locationId'] !== $locationId) {
+                throw new MalformedResponseException('Location token response did not match the requested location.', null, 'oauth.location_token');
+            }
+
+            $connection = $this->persist($locationToken);
+            $this->identifyLocation($connection);
+            try {
+                $this->branchMapper->autoMapConnection($connection->fresh());
+            } catch (Throwable $e) {
+                $this->logger->log('mapping.auto', [
+                    'level' => 'warning', 'ghl_location_id' => $connection->location_id,
+                    'message' => 'Auto-map attempt failed after agency install: '.Sanitizer::string($e->getMessage(), 200),
+                ]);
+            }
+            $connections[] = $connection->refresh();
+        }
+
+        $this->logger->log('oauth.install', [
+            'outcome' => 'agency_bulk_installed',
+            'message' => 'Company authorization exchanged for location-scoped tokens on configured LaundryCard branches.',
+            'context' => ['company_id' => $companyId, 'location_count' => count($connections)],
+        ]);
+
+        return $connections[0]->setAttribute('agency_bulk_install_count', count($connections));
+    }
+
+    private function isAppInstalledAtLocation(array $companyToken, string $companyId, string $appId, string $locationId): bool
+    {
+        $started = microtime(true);
+        try {
+            $response = Http::baseUrl(config('integration.ghl.api_base'))
+                ->acceptJson()->withToken($companyToken['access_token'])
+                ->withHeaders(['Version' => 'v3'])
+                ->timeout((int) config('integration.ghl.timeout'))
+                ->get('/oauth/installed-locations', [
+                    'companyId' => $companyId,
+                    'appId' => $appId,
+                    'locationId' => $locationId,
+                    'isInstalled' => 'true',
+                    'pageSize' => 1,
+                ]);
+        } catch (ConnectionException) {
+            $this->logger->api('ghl', 'GET', '/oauth/installed-locations', null, (int) ((microtime(true) - $started) * 1000));
+            throw new RetryableException('GHL installed-locations endpoint unreachable.', null, 'oauth.install');
+        }
+        $this->logger->api('ghl', 'GET', '/oauth/installed-locations', $response->status(), (int) ((microtime(true) - $started) * 1000), [
+            'context' => ['company_id' => $companyId, 'location_id' => $locationId],
+        ]);
+        $this->assertAgencyEndpointResponse($response, 'oauth.install');
+
+        $items = $response->json('items');
+        if (! is_array($items)) {
+            throw new MalformedResponseException('GHL installed-locations response was missing items.', $response->status(), 'oauth.install');
+        }
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $returnedId = $item['locationId'] ?? $item['_id'] ?? $item['id'] ?? null;
+            if ((string) $returnedId === $locationId && ($item['isInstalled'] ?? true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function locationTokenFromAgency(array $companyToken, string $companyId, string $locationId): array
+    {
+        $started = microtime(true);
+        try {
+            $response = Http::baseUrl(config('integration.ghl.api_base'))
+                ->asForm()->acceptJson()->withToken($companyToken['access_token'])
+                ->withHeaders(['Version' => 'v3'])
+                ->timeout((int) config('integration.ghl.timeout'))
+                ->post('/oauth/location-token', ['companyId' => $companyId, 'locationId' => $locationId]);
+        } catch (ConnectionException) {
+            $this->logger->api('ghl', 'POST', '/oauth/location-token', null, (int) ((microtime(true) - $started) * 1000), ['ghl_location_id' => $locationId]);
+            throw new RetryableException('GHL location-token endpoint unreachable.', null, 'oauth.location_token');
+        }
+        $this->logger->api('ghl', 'POST', '/oauth/location-token', $response->status(), (int) ((microtime(true) - $started) * 1000), [
+            'ghl_location_id' => $locationId,
+            'context' => ['company_id' => $companyId],
+        ]);
+        $this->assertAgencyEndpointResponse($response, 'oauth.location_token');
+        $data = $response->json();
+        if (! is_array($data)) {
+            throw new MalformedResponseException('GHL location-token response was not valid JSON.', $response->status(), 'oauth.location_token');
+        }
+
+        return $data;
+    }
+
+    private function assertAgencyEndpointResponse(Response $response, string $stage): void
+    {
+        if ($response->status() === 429 || $response->status() >= 500) {
+            throw new RetryableException("GHL OAuth endpoint error (HTTP {$response->status()}).", $response->status(), $stage, (int) ($response->header('Retry-After') ?: 30));
+        }
+        if ($response->status() >= 400) {
+            $err = Sanitizer::string((string) ($response->json('message') ?? $response->json('error_description') ?? $response->json('error') ?? 'rejected'), 150);
+            $this->logger->log($stage, [
+                'level' => 'warning', 'outcome' => 'rejected', 'http_status' => $response->status(),
+                'message' => "GHL OAuth endpoint rejected the request: {$err}",
+            ]);
+            throw new AuthorizationException("GHL rejected the OAuth request: {$err}", $response->status(), $stage);
+        }
     }
 
     /** Ensure the access token is valid for at least the configured leeway. Refreshes under a lock. */

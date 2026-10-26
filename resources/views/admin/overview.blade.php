@@ -21,12 +21,35 @@
   <div class="card stat ok"><div class="l">Verified mappings</div><div class="n" data-stat="mappings_verified">{{ $stats['mappings_verified'] }}</div></div>
   <div class="card stat {{ $stats['unmapped'] ? 'warn':'' }}"><div class="l">Unmapped branches</div><div class="n" data-stat="unmapped">{{ $stats['unmapped'] }}</div></div>
   <div class="card stat"><div class="l">Discovered customer records</div><div class="n" data-stat="records">{{ $stats['records'] }}</div><div class="muted" style="font-size:12px">{{ $stats['baseline'] }} baseline (not imported)</div></div>
+  <div class="card stat ok"><div class="l">New LaundryCard customers detected</div><div class="n" data-stat="new_customers">{{ $stats['new_customers'] }}</div><div class="muted" style="font-size:12px">First observed after that store’s baseline</div></div>
   <div class="card stat"><div class="l">Positive / zero balance</div><div class="n"><span data-stat="positive_balance">—</span> / <span data-stat="zero_balance">—</span></div></div>
   <div class="card stat"><div class="l">Awaiting balance verification</div><div class="n" data-stat="balance_unknown">—</div></div>
   <div class="card stat"><div class="l">Eligible awaiting sync</div><div class="n" data-stat="eligible_pending">—</div></div>
   <div class="card stat ok"><div class="l">Contacts created / updated</div><div class="n"><span data-stat="created">{{ $stats['created'] }}</span> / <span data-stat="updated">{{ $stats['updated'] }}</span></div></div>
   <div class="card stat {{ $stats['held'] ? 'warn':'' }}"><div class="l">Held / skipped</div><div class="n">{{ $stats['held'] }} / {{ $stats['skipped'] }}</div></div>
   <div class="card stat {{ $stats['failed'] ? 'bad':'' }}"><div class="l">Failed records</div><div class="n">{{ $stats['failed'] }}</div><div class="muted" style="font-size:12px">{{ $stats['failed_attempts'] }} failed attempts total</div></div>
+</div>
+
+<div class="card" style="overflow:auto"><h2>Recently detected from LaundryCard</h2>
+  <p class="muted">New cards first seen after the store’s baseline. Detection and balance eligibility are shown here independently of contact sync.</p>
+  <table id="dashboard-new-customers">
+    <tr><th>Store</th><th>Card</th><th>Customer</th><th>Balance</th><th>Eligibility</th><th>First observed</th></tr>
+    <tbody id="dashboard-new-customer-rows">
+    @forelse($latestNewCustomers as $r)
+      <tr>
+        <td class="mono">{{ $r->store->store_id }}</td>
+        <td class="mono">{{ substr($r->card_number,0,2) }}••••{{ substr($r->card_number,-2) }}</td>
+        <td>{{ $r->customer_name ? \Illuminate\Support\Str::limit($r->customer_name,1,'').'***' : '—' }}<div class="muted" style="font-size:11px">{{ \App\Support\Sanitizer::maskEmail($r->customer_email) }} {{ \App\Support\Sanitizer::maskPhone($r->customer_phone) }}</div></td>
+        <td>{{ $r->balance !== null ? '$'.number_format((float)$r->balance,2) : 'unknown' }}</td>
+        <td><x-badge :value="$r->eligibility_status"/></td>
+        <td>{{ $r->first_observed_at?->toDayDateTimeString() ?? '—' }}</td>
+      </tr>
+    @empty
+      <tr class="empty-new-customers"><td colspan="6" class="muted">No new LaundryCard customers detected yet.</td></tr>
+    @endforelse
+    </tbody>
+  </table>
+  <p style="margin-bottom:0"><a class="btn" href="{{ route('admin.records') }}">View customer records</a></p>
 </div>
 
 <div class="grid g2">
@@ -56,6 +79,7 @@
   const state = document.getElementById('dashboard-live-state');
   if (!state) return;
   const table = document.getElementById('dashboard-events');
+  const newCustomerRows = document.getElementById('dashboard-new-customer-rows');
   let cursor = Number(table?.dataset.cursor || 0);
   const poll = async () => {
     try {
@@ -75,6 +99,25 @@
       for (const [key, value] of Object.entries(data.stats || {})) {
         const target = document.querySelector(`[data-stat="${key}"]`);
         if (target && value !== null && typeof value !== 'object') target.textContent = value;
+      }
+      if (newCustomerRows && Array.isArray(data.new_customers)) {
+        newCustomerRows.replaceChildren();
+        if (!data.new_customers.length) {
+          const row = newCustomerRows.insertRow();
+          const cell = row.insertCell();
+          cell.colSpan = 6;
+          cell.className = 'muted';
+          cell.textContent = 'No new LaundryCard customers detected yet.';
+        } else {
+          for (const customer of data.new_customers) {
+            const row = newCustomerRows.insertRow();
+            const values = [customer.store_id, customer.card_number, `${customer.customer_name} ${customer.customer_email || ''} ${customer.customer_phone || ''}`.trim(), customer.balance, customer.eligibility, customer.first_observed_at ? new Date(customer.first_observed_at).toLocaleString() : '—'];
+            for (const value of values) {
+              const cell = row.insertCell();
+              cell.textContent = value || '—';
+            }
+          }
+        }
       }
       state.textContent = `Dashboard feed ${data.connection_state}; checked ${new Date(data.updated_at).toLocaleTimeString()} · polling every ${data.poll_interval_seconds}s · LaundryCard discovery runs on its configured schedule.`;
       state.dataset.connection = 'connected';

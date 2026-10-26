@@ -31,7 +31,7 @@
   <main>
     @if(session('status'))<div class="flash ok">{{ session('status') }}</div>@endif
     @if(session('error'))<div class="flash err">{{ session('error') }}</div>@endif
-    @if($errors->any())<div class="flash err">@foreach($errors->all() as $e)<div>{{ $e }}</div>@endforeach</div>@endif
+    @if(isset($errors) && $errors->any())<div class="flash err">@foreach($errors->all() as $e)<div>{{ $e }}</div>@endforeach</div>@endif
     @if(session('result'))
       <div class="flash res"><strong>{{ session('result')['title'] }}</strong>
         <pre>{{ json_encode(session('result')['data'], JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES) }}</pre></div>

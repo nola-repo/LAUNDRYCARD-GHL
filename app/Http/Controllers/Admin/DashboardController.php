@@ -32,6 +32,7 @@ class DashboardController extends Controller
             'unmapped' => LaundrycardStore::where('status', 'active')->whereDoesntHave('activeMapping')->count(),
             'unassigned_locations' => GhlConnection::whereDoesntHave('activeMapping')->count(),
             'records' => Rec::count(),
+            'new_customers' => Rec::whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])->count(),
             'created' => Rec::where('processing_status', Rec::SYNCED_CREATED)->count(),
             'updated' => Rec::where('processing_status', Rec::SYNCED_UPDATED)->count(),
             'held' => Rec::where('processing_status', Rec::HELD)->count(),
@@ -51,6 +52,9 @@ class DashboardController extends Controller
             'lastSync' => Rec::whereNotNull('synced_at')->max('synced_at'),
             'recentRuns' => SyncRun::latest('id')->limit(8)->get(),
             'recentEvents' => IntegrationEvent::latest('id')->limit(10)->get(),
+            'latestNewCustomers' => Rec::with('store')
+                ->whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])
+                ->latest('first_observed_at')->limit(10)->get(),
         ]);
     }
 
@@ -84,7 +88,25 @@ class DashboardController extends Controller
 
     public function records(Request $request)
     {
+        $tab = $request->query('tab');
         $q = Rec::with(['store', 'connection', 'contactMapping'])->latest('first_observed_at');
+
+        // Quick search by card number
+        if ($search = trim((string) $request->query('search', $request->query('q')))) {
+            $q->where('card_number', 'like', "%{$search}%");
+        }
+
+        // Quick Tab Presets
+        if ($tab === 'new') {
+            $q->where('classification', Rec::NEW_OBSERVED);
+        } elseif ($tab === 'named') {
+            $q->whereNotNull('customer_name');
+        } elseif ($tab === 'synced') {
+            $q->whereIn('processing_status', [Rec::SYNCED_CREATED, Rec::SYNCED_UPDATED]);
+        } elseif ($tab === 'held') {
+            $q->whereIn('processing_status', [Rec::HELD, Rec::FAILED]);
+        }
+
         if ($s = $request->query('store')) {
             $q->whereHas('store', fn ($x) => $x->where('store_id', $s));
         }
@@ -93,6 +115,13 @@ class DashboardController extends Controller
         }
         if ($c = $request->query('classification')) {
             $q->where('classification', $c);
+        }
+        if ($hasName = $request->query('has_name')) {
+            if ($hasName === 'yes') {
+                $q->whereNotNull('customer_name');
+            } elseif ($hasName === 'no') {
+                $q->whereNull('customer_name');
+            }
         }
         if ($o = $request->query('outcome')) {
             $q->where('hold_reason', $o);
@@ -104,11 +133,55 @@ class DashboardController extends Controller
             $q->whereDate('first_observed_at', '<=', $t);
         }
 
+        $perPage = (int) $request->query('per_page', 15);
+        if (! in_array($perPage, [15, 25, 50, 100], true)) {
+            $perPage = 15;
+        }
+
+        $counts = [
+            'all' => Rec::count(),
+            'new' => Rec::where('classification', Rec::NEW_OBSERVED)->count(),
+            'named' => Rec::whereNotNull('customer_name')->count(),
+            'synced' => Rec::whereIn('processing_status', [Rec::SYNCED_CREATED, Rec::SYNCED_UPDATED])->count(),
+            'held' => Rec::whereIn('processing_status', [Rec::HELD, Rec::FAILED])->count(),
+        ];
+
+        $classificationLabels = [
+            Rec::NEW_OBSERVED => '✨ New Active Customers (Recent 90 Days)',
+            Rec::BASELINE => '📁 Historical Baseline (Old accounts)',
+            Rec::CONFIRMED_NEW => '⭐ Confirmed New Customers',
+        ];
+
+        $statusLabels = [
+            Rec::PENDING => '⏳ Ready to Sync (Pending)',
+            Rec::SYNCED_CREATED => '✅ Synced to GHL (New Contact)',
+            Rec::SYNCED_UPDATED => '🔄 Synced to GHL (Updated Contact)',
+            Rec::HELD => '⚠️ On Hold (Needs Attention / Excluded)',
+            Rec::FAILED => '❌ Sync Failed',
+            Rec::QUEUED => '📦 Queued for Sync',
+            Rec::PROCESSING => '⚙️ Processing Sync',
+            Rec::BASELINE_SKIPPED => '💤 Baseline (Historical Skipped)',
+            Rec::SKIPPED => '⏭️ Skipped',
+        ];
+
+        $holdReasonLabels = [
+            'balance_not_positive' => '$0.00 Balance (Exempt until loaded)',
+            'no_branch_mapping' => 'Store branch not mapped to GHL',
+            'missing_contact_info' => 'Missing contact info (email/phone)',
+            'circuit_breaker_tripped' => 'Sync paused for review',
+        ];
+
         return view('admin.records', [
-            'records' => $q->paginate(25)->withQueryString(),
+            'records' => $q->paginate($perPage)->withQueryString(),
             'stores' => LaundrycardStore::orderBy('store_id')->get(),
-            'statuses' => [Rec::BASELINE_SKIPPED, Rec::PENDING, Rec::QUEUED, Rec::PROCESSING, Rec::SYNCED_CREATED, Rec::SYNCED_UPDATED, Rec::HELD, Rec::SKIPPED, Rec::FAILED],
+            'statuses' => [Rec::PENDING, Rec::SYNCED_CREATED, Rec::SYNCED_UPDATED, Rec::HELD, Rec::FAILED, Rec::QUEUED, Rec::PROCESSING, Rec::BASELINE_SKIPPED, Rec::SKIPPED],
             'holdReasons' => Rec::whereNotNull('hold_reason')->distinct()->pluck('hold_reason'),
+            'counts' => $counts,
+            'perPage' => $perPage,
+            'activeTab' => $tab,
+            'classificationLabels' => $classificationLabels,
+            'statusLabels' => $statusLabels,
+            'holdReasonLabels' => $holdReasonLabels,
         ]);
     }
 
@@ -169,6 +242,7 @@ class DashboardController extends Controller
                 'mappings_verified' => BranchMapping::where('status', BranchMapping::VERIFIED)->count(),
                 'unmapped' => LaundrycardStore::where('status', 'active')->whereDoesntHave('activeMapping')->count(),
                 'records' => Rec::count(),
+                'new_customers' => Rec::whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])->count(),
                 'positive_balance' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->count(),
                 'zero_balance' => Rec::where('eligibility_status', Rec::BALANCE_ZERO)->count(),
                 'balance_unknown' => Rec::whereIn('eligibility_status', [Rec::BALANCE_UNKNOWN, Rec::BALANCE_INVALID])->count(),
@@ -178,6 +252,20 @@ class DashboardController extends Controller
                 'failed' => Rec::where('processing_status', Rec::FAILED)->count(),
                 'last_discovery' => $lastRun?->finished_at?->toIso8601String(),
             ],
+            'new_customers' => Rec::with('store')
+                ->whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])
+                ->latest('first_observed_at')->limit(10)->get()
+                ->map(fn (Rec $record) => [
+                    'store_id' => $record->store?->store_id ?? '—',
+                    'card_number' => substr($record->card_number, 0, 2).'••••'.substr($record->card_number, -2),
+                    'customer_name' => $record->customer_name ? \Illuminate\Support\Str::limit($record->customer_name, 1, '').'***' : '—',
+                    'customer_email' => \App\Support\Sanitizer::maskEmail($record->customer_email),
+                    'customer_phone' => \App\Support\Sanitizer::maskPhone($record->customer_phone),
+                    'balance' => $record->balance !== null ? '$'.number_format((float) $record->balance, 2) : 'unknown',
+                    'eligibility' => $record->eligibility_status,
+                    'classification' => $record->classification,
+                    'first_observed_at' => $record->first_observed_at?->toIso8601String(),
+                ])->values(),
         ])->header('Cache-Control', 'no-store, private');
     }
 }
