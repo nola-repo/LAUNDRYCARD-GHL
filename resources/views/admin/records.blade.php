@@ -2,6 +2,21 @@
 @section('title','Customer Records')
 @section('content')
 
+{{-- Live API Feed Indicator Bar --}}
+<div id="records-live-bar" class="records-live-bar records-live-bar--connecting"
+     data-url="{{ route('admin.monitoring.updates') }}">
+  <div class="records-live-bar__inner">
+    <span class="records-live-bar__indicator"></span>
+    <span id="records-live-text">Connecting to live feed…</span>
+    <span id="records-new-badge" class="records-new-badge" style="display:none"></span>
+    <button id="records-refresh-btn" class="records-refresh-btn" style="display:none" onclick="window.location.reload()">
+      ↻ Load New Records
+    </button>
+    <span class="records-live-bar__right muted" id="records-live-count"></span>
+  </div>
+  <div class="records-live-bar__progress" id="records-live-progress"></div>
+</div>
+
 <div class="records-header">
   <div>
     <h1>
@@ -16,12 +31,12 @@
 <div class="metric-row">
   <div class="metric-box">
     <div class="metric-lbl">📊 Total Records</div>
-    <div class="metric-num">{{ number_format($counts['all']) }}</div>
+    <div class="metric-num" data-live-stat="records">{{ number_format($counts['all']) }}</div>
     <div class="muted" style="font-size:11px">All discovered accounts</div>
   </div>
   <div class="metric-box" style="border-color: rgba(52,211,153,.3); background: rgba(52,211,153,.04);">
     <div class="metric-lbl" style="color: var(--ok)">✨ New Active (90 Days)</div>
-    <div class="metric-num" style="color: var(--ok)">{{ number_format($counts['new']) }}</div>
+    <div class="metric-num" style="color: var(--ok)" data-live-stat="new_customers">{{ number_format($counts['new']) }}</div>
     <div class="muted" style="font-size:11px">Recent card activity</div>
   </div>
   <div class="metric-box">
@@ -37,7 +52,7 @@
   <div class="metric-box">
     <div class="metric-lbl">⚠️ On Hold / Attention</div>
     <div class="metric-num" style="color: var(--warn)">{{ number_format($counts['held']) }}</div>
-    <div class="muted" style="font-size:11px">Held ($0 balance or unmapped)</div>
+    <div class="muted" style="font-size:11px">Held (\$0 balance or unmapped)</div>
   </div>
 </div>
 
@@ -409,4 +424,93 @@
   </div>
 </div>
 
+<script>
+(() => {
+  const bar       = document.getElementById('records-live-bar');
+  const text      = document.getElementById('records-live-text');
+  const badge     = document.getElementById('records-new-badge');
+  const refreshBtn= document.getElementById('records-refresh-btn');
+  const countEl   = document.getElementById('records-live-count');
+  const progress  = document.getElementById('records-live-progress');
+  if (!bar) return;
+
+  const apiUrl    = bar.dataset.url;
+  const POLL_MS   = 6000;
+
+  // Track total record count on page load
+  let knownTotal  = {{ $records->total() }};
+  let lastEventId = 0;
+  let newCount    = 0;
+  let animFrame   = null;
+  let pollStart   = null;
+
+  // Animate the progress bar (thin line sweep between polls)
+  function animateProgress(startTs) {
+    const elapsed = Date.now() - startTs;
+    const pct     = Math.min(100, (elapsed / POLL_MS) * 100);
+    progress.style.width = pct + '%';
+    if (pct < 100) animFrame = requestAnimationFrame(() => animateProgress(startTs));
+  }
+
+  function setState(state) {
+    bar.className = 'records-live-bar records-live-bar--' + state;
+  }
+
+  async function poll() {
+    cancelAnimationFrame(animFrame);
+    progress.style.width = '0%';
+    pollStart = Date.now();
+
+    try {
+      const res  = await fetch(`${apiUrl}?after=${lastEventId}`, {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      lastEventId = data.last_event_id || lastEventId;
+
+      const liveTotal = data.stats?.records ?? knownTotal;
+      const diff      = liveTotal - knownTotal;
+
+      if (diff > 0) {
+        newCount += diff;
+        knownTotal = liveTotal;
+        badge.textContent = `+${newCount} new record${newCount !== 1 ? 's' : ''} available`;
+        badge.style.display = 'inline-flex';
+        refreshBtn.style.display = 'inline-flex';
+        text.textContent  = 'New incoming records detected —';
+        setState('new');
+      } else {
+        text.textContent = `Live feed connected · checked ${new Date(data.updated_at).toLocaleTimeString()} · polling every ${Math.round(POLL_MS / 1000)}s`;
+        setState('connected');
+      }
+
+      // Update stat counts in metric boxes
+      if (data.stats) {
+        const map = {
+          records:      null, // handled above as total
+        };
+        // Update the visible metric numbers if they have data-stat attributes
+        for (const [key, value] of Object.entries(data.stats)) {
+          const el = document.querySelector(`[data-live-stat="${key}"]`);
+          if (el && value !== null && typeof value !== 'object') el.textContent = Number(value).toLocaleString();
+        }
+      }
+
+      countEl.textContent = `Total in DB: ${Number(liveTotal).toLocaleString()}`;
+      animateProgress(pollStart);
+    } catch (err) {
+      text.textContent = `Live feed disconnected · retrying… ${new Date().toLocaleTimeString()}`;
+      setState('disconnected');
+      progress.style.width = '0%';
+    }
+
+    setTimeout(poll, POLL_MS);
+  }
+
+  poll();
+})();
+</script>
 @endsection
