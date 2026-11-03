@@ -22,8 +22,10 @@ class OAuthController extends Controller
                 ? $bulkCount.' configured GoHighLevel branch location'.($bulkCount === 1 ? '' : 's').' connected.'
                 : 'Location connected'.($connection->location_name ? ': '.$connection->location_name : '').'.';
 
-            return redirect()->route('admin.installations')
-                ->with('flash_success', $message.' An administrator must now assign a LaundryCard branch before synchronization is enabled.');
+            return response()->view('oauth.result', [
+                'ok' => true,
+                'message' => $message.' An administrator must now assign a LaundryCard branch before synchronization is enabled.',
+            ]);
 
         } catch (AuthorizationException $e) {
             Log::channel('integration')->error('[oauth.callback] AuthorizationException: '.$e->getMessage(), [
