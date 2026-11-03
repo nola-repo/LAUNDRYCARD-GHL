@@ -1,14 +1,29 @@
 @extends('layouts.app')
 @section('title','OAuth Installations')
 @section('content')
+
+@if(session('flash_success'))
+<div style="margin-bottom:1rem;padding:12px 16px;background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;color:#065f46;font-weight:500;">
+  ✅ {{ session('flash_success') }}
+</div>
+@endif
+
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:12px">
   <div>
     <h1 style="margin:0">OAuth Installations</h1>
     <p class="sub" style="margin:4px 0 0">Location-scoped GHL connections registered through OAuth. Tokens are encrypted and never displayed.</p>
   </div>
-  <a href="{{ route('admin.connect') }}" class="btn" style="background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:6px">
-    <span>+</span> Connect GoHighLevel Location
-  </a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="{{ route('admin.connect') }}" class="btn" style="background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:6px">
+      <span>+</span> Connect GoHighLevel Location
+    </a>
+    <a href="{{ route('admin.oauth.diagnose') }}" style="background:#f3f4f6;color:#374151;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:6px;border:1px solid #d1d5db;">
+      🔍 OAuth Diagnostics
+    </a>
+    <button onclick="copyAuthUrl()" style="background:#f3f4f6;color:#374151;padding:8px 16px;border-radius:6px;font-weight:600;border:1px solid #d1d5db;cursor:pointer;" title="Fetch and copy the authorization URL (state redacted) for inspection">
+      📋 Copy Auth URL
+    </button>
+  </div>
 </div>
 <div class="card" style="overflow:auto">
 <table>
@@ -28,4 +43,20 @@
   @empty<tr><td colspan="9" class="muted">No GHL location has authorized the app yet.</td>@endforelse
 </table>
 </div>
+
+<script>
+function copyAuthUrl() {
+  fetch('{{ route('oauth.auth-url') }}')
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert('Error: ' + data.error); return; }
+      navigator.clipboard.writeText(data.url).then(() => {
+        alert('Auth URL copied to clipboard.\n\nRedacted preview:\n' + data.redacted);
+      }).catch(() => {
+        prompt('Copy this URL:', data.url);
+      });
+    })
+    .catch(e => alert('Failed to fetch auth URL: ' + e));
+}
+</script>
 @endsection

@@ -15,6 +15,8 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 // Provider redirect target. Guarded by single-use OAuth state, not by session.
 Route::get('/oauth/callback', [OAuthController::class, 'callback'])->middleware('throttle:20,1')->name('oauth.callback');
 Route::get('/oauth/ghl/callback', [OAuthController::class, 'callback'])->middleware('throttle:20,1');
+// Returns the auth URL (state redacted) for admin inspection — no redirect.
+Route::get('/oauth/auth-url', [OAuthController::class, 'authUrl'])->middleware(['auth', 'admin'])->name('oauth.auth-url');
 
 // Vercel Cron trigger for customer discovery (guarded by CRON_SECRET)
 Route::get('/api/cron/{task}', function (\Illuminate\Http\Request $request, string $task) {
@@ -45,6 +47,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::get('/logs', [DashboardController::class, 'logs'])->name('logs');
     Route::get('/failed', [DashboardController::class, 'failed'])->name('failed');
     Route::get('/developer', [DashboardController::class, 'developer'])->name('developer');
+    Route::get('/oauth/diagnose', [DashboardController::class, 'oauthDiagnose'])->name('oauth.diagnose');
 
     Route::get('/connect', [MappingController::class, 'connect'])->name('connect');
     Route::post('/connections/{connection}/test', [MappingController::class, 'testConnection'])->name('connections.test');

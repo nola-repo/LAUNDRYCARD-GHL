@@ -13,6 +13,7 @@ use App\Models\MappingAuditLog;
 use App\Models\SyncAttempt;
 use App\Models\SyncRun;
 use App\Services\BranchMappingService;
+use App\Services\HighLevelOAuthService;
 use App\Services\LaundryCardClient;
 use Illuminate\Http\Request;
 
@@ -219,6 +220,45 @@ class DashboardController extends Controller
         return view('admin.developer', [
             'diagnostics' => IntegrationEvent::where('stage', 'like', 'api.%')->latest('id')->limit(30)->get(),
             'runs' => SyncRun::latest('id')->limit(5)->get(),
+        ]);
+    }
+
+    public function oauthDiagnose(HighLevelOAuthService $oauth)
+    {
+        $ghlConfig = config('integration.ghl');
+        $isConfigured = $oauth->isConfigured();
+
+        // Redact secrets for display
+        $safeConfig = [
+            'client_id' => filled($ghlConfig['client_id']) ? substr($ghlConfig['client_id'], 0, 8).'…' : '(missing)',
+            'client_secret' => filled($ghlConfig['client_secret']) ? '••••••••' : '(missing)',
+            'redirect_uri' => $ghlConfig['redirect_uri'] ?: '(missing)',
+            'scopes' => $ghlConfig['scopes'],
+            'authorize_url' => $ghlConfig['authorize_url'],
+            'token_url' => $ghlConfig['token_url'],
+            'api_base' => $ghlConfig['api_base'],
+        ];
+
+        $authUrlRedacted = null;
+        $authUrlError = null;
+        if ($isConfigured) {
+            try {
+                $url = $oauth->authorizationUrl();
+                $authUrlRedacted = preg_replace('/([?&]state=)[^&]+/', '$1[REDACTED]', $url);
+            } catch (\Throwable $e) {
+                $authUrlError = $e->getMessage();
+            }
+        }
+
+        $recentOauthEvents = IntegrationEvent::where('stage', 'like', 'oauth.%')
+            ->latest('id')->limit(20)->get();
+
+        return view('admin.oauth-diagnose', [
+            'isConfigured' => $isConfigured,
+            'safeConfig' => $safeConfig,
+            'authUrlRedacted' => $authUrlRedacted,
+            'authUrlError' => $authUrlError,
+            'recentOauthEvents' => $recentOauthEvents,
         ]);
     }
 
