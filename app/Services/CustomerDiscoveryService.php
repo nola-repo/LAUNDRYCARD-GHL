@@ -38,6 +38,24 @@ class CustomerDiscoveryService
      */
     public function run(bool $readOnly = false, string $trigger = 'schedule', ?int $userId = null, ?string $onlyStoreId = null): SyncRun
     {
+        // Recover any runs left in 'running' state by a previous invocation that was killed
+        // mid-flight (e.g. Vercel function timeout). The cache lock TTL is 900s, so any run
+        // still marked running after 20 minutes has definitively orphaned.
+        SyncRun::where('status', 'running')
+            ->where('started_at', '<', now()->subMinutes(20))
+            ->each(function (SyncRun $orphan): void {
+                $orphan->update([
+                    'status'      => 'failed',
+                    'finished_at' => $orphan->started_at->addMinutes(20),
+                    'error'       => 'Run timed out or was killed before it could finish (recovered on next invocation).',
+                ]);
+                $this->logger->log('discovery.run', [
+                    'outcome' => 'failed',
+                    'message' => "Orphaned run #{$orphan->id} recovered and marked failed.",
+                    'context' => ['correlation_id' => $orphan->correlation_id],
+                ]);
+            });
+
         $correlation = $this->logger->newCorrelation();
         $run = SyncRun::create([
             'correlation_id' => $correlation, 'type' => 'discovery', 'mode' => $readOnly ? 'read_only' : 'live',

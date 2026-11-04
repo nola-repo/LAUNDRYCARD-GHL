@@ -127,13 +127,17 @@
           <div class="health-card-status-badge bad">
             <span class="dot bad"></span> Credentials Missing
           </div>
-        @elseif($lastRun && in_array($lastRun->status, ['completed', 'partial']))
+        @elseif($lastLcApi && $lastLcApi->created_at->gt(now()->subHours(1)))
           <div class="health-card-status-badge ok">
-            <span class="dot ok"></span> Connected & Responsive
+            <span class="dot ok"></span> Active — Called {{ $lastLcApi->created_at->diffForHumans() }}
+          </div>
+        @elseif($lastLcApi)
+          <div class="health-card-status-badge warn">
+            <span class="dot warn"></span> Idle — Last call {{ $lastLcApi->created_at->diffForHumans() }}
           </div>
         @else
           <div class="health-card-status-badge warn">
-            <span class="dot warn"></span> Connection Standby
+            <span class="dot warn"></span> No API calls recorded yet
           </div>
         @endif
 
@@ -147,9 +151,18 @@
           <div class="health-meta-item">
             <span class="health-meta-label">Last Call</span>
             <span class="health-meta-val">
-              {{ $lastLcApi ? $lastLcApi->created_at->diffForHumans() : 'Standby' }}
-              @if($lastLcApi && $lastLcApi->http_status)
-                <span class="mono" style="color:var(--ok-light)">({{ $lastLcApi->http_status }})</span>
+              @if($lastLcApi)
+                {{ $lastLcApi->created_at->diffForHumans() }}
+                @if($lastLcApi->http_status)
+                  <span class="mono" style="color:{{ $lastLcApi->http_status < 400 ? 'var(--ok-light)' : 'var(--bad-light)' }}">
+                    (HTTP {{ $lastLcApi->http_status }})
+                  </span>
+                @endif
+                <div style="font-size:11px; color:var(--text-faint); margin-top:2px">
+                  {{ $lastLcApi->created_at->toDayDateTimeString() }}
+                </div>
+              @else
+                <span class="muted">Never — cron has not fired yet</span>
               @endif
             </span>
           </div>
@@ -210,20 +223,43 @@
           </div>
         </div>
 
-        <div class="health-card-status-badge {{ $lastRun && in_array($lastRun->status, ['completed', 'partial']) ? 'ok' : 'warn' }}">
-          <span class="dot {{ $lastRun && in_array($lastRun->status, ['completed', 'partial']) ? 'ok' : 'warn' }}"></span>
-          {{ $lastRun ? 'Last run ' . $lastRun->status : 'Schedule Active' }}
+        @php
+          $discoveryOk     = $lastRun && in_array($lastRun->status, ['completed', 'partial']);
+          $discoveryFailed = $lastRun && $lastRun->status === 'failed';
+          $discoveryBadgeClass = $discoveryOk ? 'ok' : ($discoveryFailed ? 'bad' : 'warn');
+          $discoveryDotClass   = $discoveryOk ? 'ok' : ($discoveryFailed ? 'bad' : 'warn');
+        @endphp
+
+        <div class="health-card-status-badge {{ $discoveryBadgeClass }}">
+          <span class="dot {{ $discoveryDotClass }}"></span>
+          @if(!$lastRun)
+            Awaiting First Cron
+          @elseif($discoveryOk)
+            Last run {{ $lastRun->status }} · {{ $lastRun->finished_at?->diffForHumans() }}
+          @elseif($discoveryFailed)
+            Last run failed · {{ $lastRun->finished_at?->diffForHumans() ?? $lastRun->started_at->diffForHumans() }}
+          @else
+            {{ ucfirst($lastRun->status) }}
+          @endif
         </div>
 
         <div class="health-card-meta-list">
           <div class="health-meta-item">
             <span class="health-meta-label">Scan Cadence</span>
-            <span class="health-meta-val mono">Every {{ config('integration.discovery.schedule_every_minutes') }} mins</span>
+            <span class="health-meta-val mono">Every {{ config('integration.discovery.schedule_every_minutes') }} mins via Vercel Cron</span>
           </div>
           <div class="health-meta-item">
             <span class="health-meta-label">Last Successful Scan</span>
             <span class="health-meta-val" id="health-last-discovery-time">
-              {{ $lastDiscovery ? $lastDiscovery->finished_at?->diffForHumans() : 'Standby' }}
+              @if($lastDiscovery)
+                {{ $lastDiscovery->finished_at?->diffForHumans() }}
+                <span class="badge b-ok" style="font-size:10px; padding:1px 6px; margin-left:4px">{{ $lastDiscovery->status }}</span>
+              @elseif($lastRun)
+                <span style="color:var(--warn-light)">No completed live run yet</span>
+                <div style="font-size:11px; color:var(--text-faint); margin-top:2px">Last attempt: {{ $lastRun->started_at->toDayDateTimeString() }}</div>
+              @else
+                <span style="color:var(--text-faint)">Cron not triggered yet</span>
+              @endif
             </span>
           </div>
           <div class="health-meta-item">
