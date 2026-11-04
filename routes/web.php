@@ -52,6 +52,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::get('/connect', [MappingController::class, 'connect'])->name('connect');
     Route::post('/connections/{connection}/test', [MappingController::class, 'testConnection'])->name('connections.test');
     Route::post('/connections/{connection}/disconnect', [MappingController::class, 'disconnect'])->name('connections.disconnect');
+    Route::post('/mappings/auto-map', [MappingController::class, 'runAutoMap'])->name('mappings.auto-map');
 
     Route::get('/monitoring/updates', [DashboardController::class, 'updates'])->name('monitoring.updates');
 });
