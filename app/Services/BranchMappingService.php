@@ -126,7 +126,7 @@ class BranchMappingService
                 continue;
             }
 
-            $this->createVerifiedMapping($store, $connection, null, 'explicit_business_mapping');
+            $this->createVerifiedMapping($store, $connection, null, 'explicit_config');
             $mapped++;
         }
 

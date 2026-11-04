@@ -62,20 +62,25 @@ class MappingController extends Controller
      */
     public function runAutoMap(BranchMappingService $mapper)
     {
-        $mapped = $mapper->autoMapAll();
+        try {
+            $mapped = $mapper->autoMapAll();
 
-        $total = \App\Models\LaundrycardStore::where('status', 'active')->count();
-        $verified = \App\Models\BranchMapping::where('status', \App\Models\BranchMapping::VERIFIED)->count();
+            $total = \App\Models\LaundrycardStore::where('status', 'active')->count();
+            $verified = \App\Models\BranchMapping::where('status', \App\Models\BranchMapping::VERIFIED)->count();
 
-        if ($mapped > 0) {
-            return back()->with('status', "✅ Auto-mapping complete: {$mapped} new mapping(s) created. {$verified}/{$total} branches are now verified.");
+            if ($mapped > 0) {
+                return back()->with('status', "✅ Auto-mapping complete: {$mapped} new mapping(s) created. {$verified}/{$total} branches are now verified.");
+            }
+
+            if ($verified === $total && $total > 0) {
+                return back()->with('status', "All {$total} branches are already mapped and verified. No changes needed.");
+            }
+
+            $unmapped = $total - $verified;
+            return back()->with('error', "Auto-mapping could not resolve {$unmapped} branch(es). Check that the INTEGRATION_BRANCH_LOCATION_MAP config contains the correct store-to-location pairs and that both stores and OAuth connections are active.");
+        } catch (\Throwable $e) {
+            report($e);
+            return back()->with('error', 'Auto-mapping failed: ' . $e->getMessage());
         }
-
-        if ($verified === $total && $total > 0) {
-            return back()->with('status', "All {$total} branches are already mapped and verified. No changes needed.");
-        }
-
-        $unmapped = $total - $verified;
-        return back()->with('error', "Auto-mapping could not resolve {$unmapped} branch(es). Check that the INTEGRATION_BRANCH_LOCATION_MAP config contains the correct store→location pairs and that both stores and OAuth connections are active.");
     }
 }
