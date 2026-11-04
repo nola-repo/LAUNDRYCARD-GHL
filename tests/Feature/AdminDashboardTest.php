@@ -40,6 +40,23 @@ class AdminDashboardTest extends TestCase
         foreach (['overview', 'installations', 'mappings', 'records', 'logs', 'failed', 'developer'] as $r) {
             $a->get(route("admin.$r"))->assertOk();
         }
+
+        // Detailed overview assertions
+        $overviewHtml = $a->get(route('admin.overview'))->getContent();
+        $this->assertStringContainsString('sec-hero', $overviewHtml);
+        $this->assertStringContainsString('sec-health', $overviewHtml);
+        $this->assertStringContainsString('sec-kpis', $overviewHtml);
+        $this->assertStringContainsString('sec-pipeline', $overviewHtml);
+        $this->assertStringContainsString('sec-branches', $overviewHtml);
+        $this->assertStringContainsString('sec-customers', $overviewHtml);
+        $this->assertStringContainsString('sec-activity', $overviewHtml);
+        $this->assertStringContainsString('dashboard-live-state', $overviewHtml);
+        $this->assertStringContainsString('dashboard-new-customers', $overviewHtml);
+        $this->assertStringContainsString('dashboard-events', $overviewHtml);
+        $this->assertStringContainsString('data-stat="records"', $overviewHtml);
+        $this->assertStringContainsString('data-stat="new_customers"', $overviewHtml);
+        $this->assertStringContainsString('data-stat="branches"', $overviewHtml);
+        $this->assertStringContainsString('data-stat="locations"', $overviewHtml);
     }
 
     public function test_dashboard_never_renders_tokens_or_secrets(): void

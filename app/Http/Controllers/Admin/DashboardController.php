@@ -34,6 +34,10 @@ class DashboardController extends Controller
             'unassigned_locations' => GhlConnection::whereDoesntHave('activeMapping')->count(),
             'records' => Rec::count(),
             'new_customers' => Rec::whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])->count(),
+            'positive_balance' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->count(),
+            'zero_balance' => Rec::where('eligibility_status', Rec::BALANCE_ZERO)->count(),
+            'balance_unknown' => Rec::whereIn('eligibility_status', [Rec::BALANCE_UNKNOWN, Rec::BALANCE_INVALID])->count(),
+            'eligible_pending' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->whereIn('processing_status', [Rec::PENDING, Rec::QUEUED])->count(),
             'created' => Rec::where('processing_status', Rec::SYNCED_CREATED)->count(),
             'updated' => Rec::where('processing_status', Rec::SYNCED_UPDATED)->count(),
             'held' => Rec::where('processing_status', Rec::HELD)->count(),
@@ -43,8 +47,11 @@ class DashboardController extends Controller
             'failed_attempts' => SyncAttempt::where('status', 'failed')->count(),
         ];
 
+        $stores = LaundrycardStore::with(['activeMapping.connection'])->withCount('sourceRecords')->orderBy('store_id')->get();
+
         return view('admin.overview', [
             'stats' => $stats,
+            'stores' => $stores,
             'lcConfigured' => $lc->isConfigured(),
             'syncEnabled' => (bool) config('integration.sync.enabled'),
             'lastRun' => $lastRun,
@@ -52,7 +59,7 @@ class DashboardController extends Controller
             'lastLcApi' => $lastLcApi,
             'lastSync' => Rec::whereNotNull('synced_at')->max('synced_at'),
             'recentRuns' => SyncRun::latest('id')->limit(8)->get(),
-            'recentEvents' => IntegrationEvent::latest('id')->limit(10)->get(),
+            'recentEvents' => IntegrationEvent::latest('id')->limit(12)->get(),
             'latestNewCustomers' => Rec::with('store')
                 ->whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])
                 ->latest('first_observed_at')->limit(10)->get(),
@@ -279,8 +286,10 @@ class DashboardController extends Controller
             'stats' => [
                 'branches' => LaundrycardStore::where('status', 'active')->count(),
                 'locations' => GhlConnection::count(),
+                'locations_active' => GhlConnection::where('status', GhlConnection::ACTIVE)->count(),
                 'mappings_verified' => BranchMapping::where('status', BranchMapping::VERIFIED)->count(),
                 'unmapped' => LaundrycardStore::where('status', 'active')->whereDoesntHave('activeMapping')->count(),
+                'unassigned_locations' => GhlConnection::whereDoesntHave('activeMapping')->count(),
                 'records' => Rec::count(),
                 'new_customers' => Rec::whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])->count(),
                 'positive_balance' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->count(),
@@ -289,7 +298,11 @@ class DashboardController extends Controller
                 'eligible_pending' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->whereIn('processing_status', [Rec::PENDING, Rec::QUEUED])->count(),
                 'created' => Rec::where('processing_status', Rec::SYNCED_CREATED)->count(),
                 'updated' => Rec::where('processing_status', Rec::SYNCED_UPDATED)->count(),
+                'held' => Rec::where('processing_status', Rec::HELD)->count(),
+                'skipped' => Rec::whereIn('processing_status', [Rec::SKIPPED])->count(),
+                'baseline' => Rec::where('processing_status', Rec::BASELINE_SKIPPED)->count(),
                 'failed' => Rec::where('processing_status', Rec::FAILED)->count(),
+                'failed_attempts' => SyncAttempt::where('status', 'failed')->count(),
                 'last_discovery' => $lastRun?->finished_at?->toIso8601String(),
             ],
             'new_customers' => Rec::with('store')
