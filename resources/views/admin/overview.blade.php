@@ -167,6 +167,17 @@
             </span>
           </div>
           <div class="health-meta-item">
+            <span class="health-meta-label">Last Success</span>
+            <span class="health-meta-val">
+              @if(isset($lastLcApiSuccess) && $lastLcApiSuccess)
+                {{ $lastLcApiSuccess->created_at->diffForHumans() }}
+                <span class="mono" style="color:var(--ok-light)">(HTTP {{ $lastLcApiSuccess->http_status }})</span>
+              @else
+                <span class="muted">None recorded</span>
+              @endif
+            </span>
+          </div>
+          <div class="health-meta-item">
             <span class="health-meta-label">POS MachNo</span>
             <span class="health-meta-val mono">{{ config('integration.laundrycard.pos_mach_no') ? 'Configured' : 'Global' }}</span>
           </div>
@@ -246,8 +257,40 @@
         <div class="health-card-meta-list">
           <div class="health-meta-item">
             <span class="health-meta-label">Scan Cadence</span>
-            <span class="health-meta-val mono">Every {{ config('integration.discovery.schedule_every_minutes') }} mins via Vercel Cron</span>
+            <span class="health-meta-val mono">Every {{ config('integration.discovery.schedule_every_minutes') }} mins (Automated)</span>
           </div>
+          <div class="health-meta-item">
+            <span class="health-meta-label">Next Scheduled Run</span>
+            <span class="health-meta-val mono">
+              @if(isset($nextScheduledRun) && $nextScheduledRun)
+                {{ $nextScheduledRun->isPast() ? 'Imminent / Next Trigger' : $nextScheduledRun->diffForHumans() }}
+              @else
+                Every {{ config('integration.discovery.schedule_every_minutes') }} mins
+              @endif
+            </span>
+          </div>
+          @if(isset($lastRunDuration) && $lastRunDuration !== null)
+            <div class="health-meta-item">
+              <span class="health-meta-label">Execution Time</span>
+              <span class="health-meta-val mono">{{ $lastRunDuration }}s</span>
+            </div>
+          @endif
+          @if($lastRun && $lastRun->stats)
+            <div class="health-meta-item">
+              <span class="health-meta-label">Last Run Telemetry</span>
+              <span class="health-meta-val mono" style="font-size:11px">
+                Seen: {{ $lastRun->stats['cards_seen'] ?? 0 }} · New: {{ $lastRun->stats['new_records'] ?? 0 }} · Scanned: {{ $lastRun->stats['stores_scanned'] ?? 0 }}
+              </span>
+            </div>
+          @endif
+          @if($lastRun && $lastRun->error)
+            <div class="health-meta-item">
+              <span class="health-meta-label" style="color:var(--bad-light)">Last Error</span>
+              <span class="health-meta-val" style="color:var(--bad-light); font-size:11px" title="{{ $lastRun->error }}">
+                {{ \Illuminate\Support\Str::limit($lastRun->error, 40) }}
+              </span>
+            </div>
+          @endif
           <div class="health-meta-item">
             <span class="health-meta-label">Last Successful Scan</span>
             <span class="health-meta-val" id="health-last-discovery-time">

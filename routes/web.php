@@ -18,26 +18,57 @@ Route::get('/oauth/ghl/callback', [OAuthController::class, 'callback'])->middlew
 // Returns the auth URL (state redacted) for admin inspection — no redirect.
 Route::get('/oauth/auth-url', [OAuthController::class, 'authUrl'])->middleware(['auth', 'admin'])->name('oauth.auth-url');
 
-// Vercel Cron trigger for customer discovery (guarded by CRON_SECRET)
-Route::get('/api/cron/{task}', function (\Illuminate\Http\Request $request, string $task) {
+// Vercel Cron & External Webhook trigger for customer discovery
+$cronHandler = function (\Illuminate\Http\Request $request, string $task) {
     $secret = (string) config('integration.cron_secret');
-    if ($secret === '' || ! hash_equals('Bearer '.$secret, (string) $request->header('Authorization'))) {
+    $authHeader = (string) $request->header('Authorization');
+    $querySecret = (string) $request->query('secret');
+
+    $authorized = $secret !== '' && (
+        hash_equals('Bearer '.$secret, $authHeader) ||
+        hash_equals($secret, $querySecret)
+    );
+
+    if (! $authorized) {
         abort(401, 'Unauthorized cron execution');
     }
+
+    $startedAt = microtime(true);
+
     if ($task === 'discovery') {
         $exit = \Illuminate\Support\Facades\Artisan::call('integration:discover');
+        $run = \App\Models\SyncRun::where('type', 'discovery')->latest('id')->first();
+        $duration = (int) round((microtime(true) - $startedAt) * 1000);
+
+        return response()->json([
+            'status' => $exit === 0 ? 'completed' : 'failed',
+            'task' => $task,
+            'duration_ms' => $duration,
+            'run_id' => $run?->id,
+            'run_status' => $run?->status,
+            'stats' => $run?->stats,
+            'error' => $run?->error,
+        ], $exit === 0 ? 200 : 500);
     } elseif ($task === 'queue') {
         // Vercel does not keep a Laravel worker alive between invocations. Process
         // at most one persisted job per bounded cron invocation.
         $exit = \Illuminate\Support\Facades\Artisan::call('queue:work', [
             'connection' => config('queue.default'), '--once' => true, '--tries' => 1, '--timeout' => 20,
         ]);
+        $duration = (int) round((microtime(true) - $startedAt) * 1000);
+
+        return response()->json([
+            'status' => $exit === 0 ? 'completed' : 'failed',
+            'task' => $task,
+            'duration_ms' => $duration,
+        ], $exit === 0 ? 200 : 500);
     } else {
         abort(404);
     }
+};
 
-    return response()->json(['status' => $exit === 0 ? 'completed' : 'failed', 'task' => $task], $exit === 0 ? 200 : 500);
-})->whereIn('task', ['discovery', 'queue'])->name('cron.task');
+Route::get('/api/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue'])->name('cron.task');
+Route::get('/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue']);
 
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/', [DashboardController::class, 'overview'])->name('overview');

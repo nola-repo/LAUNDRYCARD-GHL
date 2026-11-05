@@ -396,6 +396,100 @@ class DiscoveryAndSyncTest extends TestCase
         }
     }
 
+    public function test_incremental_scan_uses_min_date_time_and_updates_cursor(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $store = LaundrycardStore::where('store_id', '0160')->first();
+        $store->update([
+            'baseline_completed_at' => now()->subDay(),
+            'last_sync_cursor_at' => now()->subHours(2),
+        ]);
+
+        $newCard = $this->card('99999', 'incremental.new@example.test', now()->toIso8601ZuluString());
+        $this->httpFake($this->lcFake($this->stores, ['0160' => [$newCard]]) + $this->ghlFake());
+
+        $svc = app(CustomerDiscoveryService::class);
+        $run = $svc->run();
+
+        $this->assertSame('completed', $run->status);
+
+        // Verify MinDateTime was sent in the LaundryCard API request
+        $lcCardsReq = collect(Http::recorded())->first(fn ($p) => str_contains($p[0]->url(), '/api/cards') && str_contains($p[0]->url(), 'StoreID=160'));
+        $this->assertNotNull($lcCardsReq);
+        parse_str(parse_url($lcCardsReq[0]->url(), PHP_URL_QUERY), $query);
+        $this->assertArrayHasKey('MinDateTime', $query);
+
+        // Verify record is created and classified as NEW_OBSERVED
+        $rec = Rec::where('card_number', '99999')->firstOrFail();
+        $this->assertSame(Rec::NEW_OBSERVED, $rec->classification);
+        $this->assertSame(Rec::SYNCED_CREATED, $rec->processing_status);
+
+        // Verify store cursor was updated
+        $store->refresh();
+        $this->assertNotNull($store->last_sync_cursor_at);
+        $this->assertSame('ok', $store->last_scan_status);
+    }
+
+    public function test_store_failure_is_isolated_and_other_stores_continue(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $this->verifiedMapping('0679', 'LOC_B');
+
+        $cardA = $this->card('AAA', 'storeA@example.test', null, 160);
+        $this->httpFake([
+            'https://live.laundrycard.com/api/AuthToken' => Http::response(['Token' => 'LC_TOKEN_123']),
+            'https://live.laundrycard.com/api/stores*' => Http::response($this->stores),
+            'https://live.laundrycard.com/api/cards*StoreID=160*' => Http::response([$cardA]),
+            'https://live.laundrycard.com/api/cards*StoreID=679*' => Http::response(['message' => 'Internal server error'], 500),
+        ] + $this->ghlFake());
+
+        $svc = app(CustomerDiscoveryService::class);
+        $run = $svc->run();
+
+        $this->assertSame('partial', $run->status);
+        $this->assertSame(1, $run->stats['stores_scanned']);
+        $this->assertSame(1, $run->stats['stores_failed']);
+
+        $store160 = LaundrycardStore::where('store_id', '0160')->first();
+        $this->assertSame('ok', $store160->last_scan_status);
+
+        $store679 = LaundrycardStore::where('store_id', '0679')->first();
+        $this->assertSame('failed', $store679->last_scan_status);
+        $this->assertNotNull($store679->last_scan_error);
+    }
+
+    public function test_baseline_records_never_flip_to_pending_on_subsequent_scans(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $store = LaundrycardStore::where('store_id', '0160')->first();
+        $store->update(['baseline_completed_at' => now()->subDay()]);
+
+        // Existing baseline record
+        $rec = Rec::create([
+            'laundrycard_store_id' => $store->id,
+            'card_number' => 'BASE001',
+            'classification' => Rec::BASELINE,
+            'processing_status' => Rec::BASELINE_SKIPPED,
+            'hold_reason' => 'initial_import_disabled',
+            'balance' => '25.00',
+            'eligibility_status' => Rec::BALANCE_ELIGIBLE,
+            'eligibility_reason' => 'positive_balance',
+            'first_observed_at' => now()->subDays(5),
+            'last_observed_at' => now()->subDays(5),
+        ]);
+
+        $card = $this->card('BASE001', 'base@example.test', now()->toIso8601ZuluString(), 160);
+        $this->httpFake($this->lcFake($this->stores, ['0160' => [$card]]) + $this->ghlFake());
+
+        $svc = app(CustomerDiscoveryService::class);
+        $svc->run();
+
+        $rec->refresh();
+        $this->assertSame(Rec::BASELINE_SKIPPED, $rec->processing_status);
+        $this->assertSame('initial_import_disabled', $rec->hold_reason);
+        $this->assertCount(0, $this->ghlSent());
+    }
+
     private function pendingRecord(string $card, string $email, ?string $name = null, ?string $phone = null): Rec
     {
         $store = LaundrycardStore::where('store_id', '0160')->first();

@@ -23,7 +23,12 @@ class DashboardController extends Controller
     {
         $lastDiscovery = SyncRun::where('type', 'discovery')->whereIn('status', ['completed', 'partial'])->where('mode', 'live')->latest('finished_at')->first();
         $lastRun = SyncRun::where('type', 'discovery')->latest('id')->first();
-        $lastLcApi = IntegrationEvent::where('stage', 'like', 'api.laundrycard')->latest('id')->first();
+        $lastLcApi = IntegrationEvent::where('stage', 'like', 'api.laundrycard%')->latest('id')->first();
+        $lastLcApiSuccess = IntegrationEvent::where('stage', 'like', 'api.laundrycard%')->where('http_status', '<', 400)->whereNotNull('http_status')->latest('id')->first();
+
+        $cadence = (int) config('integration.discovery.schedule_every_minutes', 15);
+        $nextScheduledRun = $lastRun?->started_at ? $lastRun->started_at->addMinutes($cadence) : null;
+        $lastRunDuration = $lastRun && $lastRun->finished_at ? round($lastRun->started_at->diffInSeconds($lastRun->finished_at, true), 1) : null;
 
         $stats = [
             'branches' => LaundrycardStore::where('status', 'active')->count(),
@@ -57,6 +62,9 @@ class DashboardController extends Controller
             'lastRun' => $lastRun,
             'lastDiscovery' => $lastDiscovery,
             'lastLcApi' => $lastLcApi,
+            'lastLcApiSuccess' => $lastLcApiSuccess,
+            'nextScheduledRun' => $nextScheduledRun,
+            'lastRunDuration' => $lastRunDuration,
             'lastSync' => Rec::whereNotNull('synced_at')->max('synced_at'),
             'recentRuns' => SyncRun::latest('id')->limit(8)->get(),
             'recentEvents' => IntegrationEvent::latest('id')->limit(12)->get(),
@@ -276,6 +284,12 @@ class DashboardController extends Controller
         $events = IntegrationEvent::where('id', '>', $after)->orderBy('id')->limit(50)
             ->get(['id', 'created_at', 'stage', 'level', 'outcome', 'message', 'store_id', 'ghl_location_id']);
         $lastRun = SyncRun::where('type', 'discovery')->latest('id')->first();
+        $lastDiscovery = SyncRun::where('type', 'discovery')->whereIn('status', ['completed', 'partial'])->where('mode', 'live')->latest('finished_at')->first();
+        $lastLcApi = IntegrationEvent::where('stage', 'like', 'api.laundrycard%')->latest('id')->first();
+        $lastLcApiSuccess = IntegrationEvent::where('stage', 'like', 'api.laundrycard%')->where('http_status', '<', 400)->whereNotNull('http_status')->latest('id')->first();
+        $cadence = (int) config('integration.discovery.schedule_every_minutes', 15);
+        $nextScheduledRun = $lastRun?->started_at ? $lastRun->started_at->addMinutes($cadence) : null;
+        $lastRunDuration = $lastRun && $lastRun->finished_at ? round($lastRun->started_at->diffInSeconds($lastRun->finished_at, true), 1) : null;
 
         return response()->json([
             'updated_at' => now()->toIso8601String(),
@@ -283,6 +297,21 @@ class DashboardController extends Controller
             'events' => $events,
             'last_event_id' => $events->last()?->id ?? $after,
             'connection_state' => 'connected',
+            'scheduler' => [
+                'status' => $lastRun?->status ?? 'standby',
+                'last_run_at' => $lastRun?->started_at?->toIso8601String(),
+                'last_discovery_at' => $lastDiscovery?->finished_at?->toIso8601String(),
+                'next_scheduled_at' => $nextScheduledRun?->toIso8601String(),
+                'duration_seconds' => $lastRunDuration,
+                'cadence_minutes' => $cadence,
+                'last_error' => $lastRun?->error,
+                'stats' => $lastRun?->stats,
+            ],
+            'api' => [
+                'last_call_at' => $lastLcApi?->created_at?->toIso8601String(),
+                'last_call_status' => $lastLcApi?->http_status,
+                'last_success_at' => $lastLcApiSuccess?->created_at?->toIso8601String(),
+            ],
             'stats' => [
                 'branches' => LaundrycardStore::where('status', 'active')->count(),
                 'locations' => GhlConnection::count(),

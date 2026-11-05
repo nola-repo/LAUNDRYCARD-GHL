@@ -134,7 +134,13 @@ class AdminDashboardTest extends TestCase
 
     public function test_cron_endpoint_fails_closed_without_the_bearer_secret(): void
     {
+        $this->httpFake($this->lcFake([], []));
+        config(['integration.cron_secret' => 'valid_secret_123']);
         $this->get('/api/cron/discovery')->assertUnauthorized();
         $this->get('/api/cron/discovery', ['Authorization' => 'Bearer wrong'])->assertUnauthorized();
+        $this->get('/api/cron/discovery?secret=wrong')->assertUnauthorized();
+
+        $this->get('/api/cron/discovery', ['Authorization' => 'Bearer valid_secret_123'])->assertOk();
+        $this->get('/api/cron/discovery?secret=valid_secret_123')->assertOk();
     }
 }

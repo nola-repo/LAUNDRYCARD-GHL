@@ -36,5 +36,8 @@ putenv("APP_SERVICES_CACHE={$storagePath}/bootstrap/cache/services.php");
 $_ENV['APP_SERVICES_CACHE'] = "{$storagePath}/bootstrap/cache/services.php";
 $_SERVER['APP_SERVICES_CACHE'] = "{$storagePath}/bootstrap/cache/services.php";
 
+// Normalize script name so Symfony/Laravel doesn't treat /api as application base URL
+$_SERVER['SCRIPT_NAME'] = '/index.php';
+
 // 3. Delegate to Laravel public entrypoint
 require __DIR__ . '/../public/index.php';

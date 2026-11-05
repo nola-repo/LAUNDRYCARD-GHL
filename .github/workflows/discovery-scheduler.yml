@@ -1,0 +1,54 @@
+name: Automated 15-Minute Discovery Scheduler
+
+on:
+  schedule:
+    # Runs every 15 minutes around the clock
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Discovery mode (live or read-only)'
+        required: true
+        default: 'live'
+        type: choice
+        options:
+          - live
+          - read-only
+
+concurrency:
+  group: discovery-sync
+  cancel-in-progress: false
+
+jobs:
+  discovery:
+    name: Run LaundryCard Discovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger Discovery Endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL || 'https://laundrycard-sync.vercel.app' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'lc_sec_8f9c1e74a2b6d0e82f41973b5c0e1847' }}
+        run: |
+          echo "Triggering automated discovery on ${APP_URL} at $(date -u)..."
+          HTTP_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME_TOTAL:%{time_total}" \
+            -X GET "${APP_URL}/api/cron/discovery" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Accept: application/json" \
+            --max-time 60)
+
+          BODY=$(echo "${HTTP_RESPONSE}" | sed -e '/HTTP_STATUS:/,$d')
+          STATUS=$(echo "${HTTP_RESPONSE}" | grep "HTTP_STATUS:" | cut -d':' -f2)
+          DURATION=$(echo "${HTTP_RESPONSE}" | grep "TIME_TOTAL:" | cut -d':' -f2)
+
+          echo "Response Status: ${STATUS} (${DURATION}s)"
+          echo "Response Body: ${BODY}"
+
+          if [ "${STATUS}" != "200" ]; then
+            echo "Discovery run failed with HTTP ${STATUS}"
+            exit 1
+          fi
+
+          echo "Discovery run successfully completed in ${DURATION}s."
+

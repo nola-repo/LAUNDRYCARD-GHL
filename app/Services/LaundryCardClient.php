@@ -98,12 +98,13 @@ class LaundryCardClient
     }
 
     /** @return list<array<string,mixed>> normalized cards */
-    public function cards(string|int $storeId, ?string $minCardNum = null, ?string $maxCardNum = null): array
+    public function cards(string|int $storeId, ?string $minCardNum = null, ?string $maxCardNum = null, ?string $minDateTime = null): array
     {
         $query = array_filter([
             'StoreID' => (int) $storeId,
             'MinCardNum' => $minCardNum,
             'MaxCardNum' => $maxCardNum,
+            'MinDateTime' => $minDateTime,
         ], fn ($v) => $v !== null);
 
         $rows = $this->listOf($this->get('/api/cards', $query, 'laundrycard.cards', ['store_id' => Normalizer::storeId($storeId)]), 'laundrycard.cards');

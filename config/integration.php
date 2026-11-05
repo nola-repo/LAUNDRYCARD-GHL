@@ -61,10 +61,13 @@ return [
         // import = first scan marks records pending (still needs a verified mapping).
         'initial_import' => env('INTEGRATION_INITIAL_IMPORT', 'skip'),
         'schedule_every_minutes' => (int) env('INTEGRATION_DISCOVERY_EVERY_MINUTES', 15),
+        'overlap_minutes' => (int) env('INTEGRATION_DISCOVERY_OVERLAP_MINUTES', 30),
+        'max_lookback_hours' => (int) env('INTEGRATION_DISCOVERY_MAX_LOOKBACK_HOURS', 2),
+        'max_baseline_batch' => (int) env('INTEGRATION_BASELINE_BATCH', 10000),
         'enrich_with_account_detail' => (bool) env('INTEGRATION_ENRICH_ACCOUNT', true),
     ],
 
-    'cron_secret' => env('CRON_SECRET'),
+    'cron_secret' => env('INTEGRATION_CRON_KEY', env('CRON_SECRET')),
 
     'sync' => [
         // Real contact writes remain off until credentials and routing have been verified.

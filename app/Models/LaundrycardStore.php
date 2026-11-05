@@ -20,6 +20,7 @@ class LaundrycardStore extends Model
             'baseline_started_at' => 'datetime',
             'last_scan_at' => 'datetime',
             'last_successful_scan_at' => 'datetime',
+            'last_sync_cursor_at' => 'datetime',
         ];
     }
 
