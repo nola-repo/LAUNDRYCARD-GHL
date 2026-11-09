@@ -13,3 +13,13 @@ Schedule::command('integration:discover')
     ->cron('*/'.max(1, (int) config('integration.discovery.schedule_every_minutes')).' * * * *')
     ->withoutOverlapping(30)
     ->onOneServer();
+
+// Proactively rotate GHL OAuth tokens before they expire.
+// Runs every 6 hours; tokens expire every 24 h so this provides 4 refresh
+// opportunities per day, with ensureFresh() leeway (300 s) as the final guard
+// on each live API call.
+Schedule::command('ghl:refresh-tokens')
+    ->everySixHours()
+    ->withoutOverlapping(5)
+    ->onOneServer()
+    ->runInBackground();
