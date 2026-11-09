@@ -59,7 +59,11 @@ class GhlConnection extends Model
             return 'expired';
         }
 
-        return $this->expires_at->diffInMinutes(now()) < 5 ? 'expiring' : 'valid';
+        // Use gt() comparison instead of diffInMinutes() — Carbon returns a
+        // signed (negative) diff when expires_at is in the future, so
+        // diffInMinutes(now()) < 5 would incorrectly return true for all
+        // future timestamps, making a just-refreshed token appear as 'expiring'.
+        return $this->expires_at->gt(now()->addMinutes(5)) ? 'valid' : 'expiring';
     }
 
     public function hasScope(string $scope): bool

@@ -11,6 +11,7 @@ class RefreshGhlTokens extends Command
 {
     protected $signature = 'ghl:refresh-tokens
                             {--force : Refresh all active connections, even valid ones}
+                            {--dry-run : Show what would be refreshed without making any changes}
                             {--location= : Refresh one specific GHL location ID only}';
 
     protected $description = 'Proactively refresh GHL OAuth tokens that are about to expire.';
@@ -18,6 +19,7 @@ class RefreshGhlTokens extends Command
     public function handle(HighLevelOAuthService $oauth): int
     {
         $leeway = (int) config('integration.ghl.refresh_leeway');
+        $dryRun = (bool) $this->option('dry-run');
 
         // Proactive window: 2× the per-request leeway so the scheduler catches
         // tokens well before ensureFresh() would have to do it on a live request.
@@ -44,6 +46,10 @@ class RefreshGhlTokens extends Command
             return self::SUCCESS;
         }
 
+        if ($dryRun) {
+            $this->warn('[dry-run] No changes will be made.');
+        }
+
         $this->line("Checking {$connections->count()} connection(s)...");
 
         $refreshed = 0;
@@ -51,21 +57,33 @@ class RefreshGhlTokens extends Command
         $failed    = 0;
 
         foreach ($connections as $connection) {
-            try {
-                $oauth->ensureFresh($connection);
-                $connection->refresh(); // reload from DB after potential lock-based refresh
+            $label = "{$connection->location_id} ({$connection->location_name})";
 
+            if ($dryRun) {
                 $state = $connection->tokenExpiryState();
+                $this->line("  [dry-run] {$label} — current state: {$state}, expires: {$connection->expires_at}");
+                $skipped++;
+                continue;
+            }
+
+            try {
+                // Use the returned connection — ensureFresh() may return a
+                // refreshed model and the return value must not be discarded.
+                $fresh = $oauth->ensureFresh($connection);
+                // Reload from DB to confirm persisted state.
+                $fresh->refresh();
+
+                $state = $fresh->tokenExpiryState();
 
                 if ($state === 'valid') {
-                    $this->line("  ✓ {$connection->location_id} ({$connection->location_name}) — {$state}");
+                    $this->line("  ✓ {$label} — valid until {$fresh->expires_at}");
                     $refreshed++;
                 } else {
-                    $this->warn("  ? {$connection->location_id} — still {$state} after refresh attempt");
+                    $this->warn("  ? {$label} — still {$state} after refresh (expires: {$fresh->expires_at})");
                     $skipped++;
                 }
             } catch (Throwable $e) {
-                $this->error("  ✗ {$connection->location_id} — {$e->getMessage()}");
+                $this->error("  ✗ {$label} — " . $e->getMessage());
                 $failed++;
             }
         }
