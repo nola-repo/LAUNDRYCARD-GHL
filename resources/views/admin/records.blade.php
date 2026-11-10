@@ -338,11 +338,11 @@
                 $hasMach = app(\App\Services\LaundryCardClient::class)->hasMachNo($r->store->store_id ?? '');
                 $previewTags = app(\App\Services\ContactClassificationService::class)->managedTags($r);
               @endphp
-              @if($r->customer_name)
+              @if($hasName || $hasEmail || $hasPhone)
                 <div class="user-name">
-                  <span class="user-avatar">{{ strtoupper(substr(trim($r->customer_name), 0, 1)) }}</span>
-                  <span>{{ ucwords(strtolower($r->customer_name)) }}</span>
-                  <span class="badge b-ok" style="font-size:10px;margin-left:4px" title="Customer identified">Enriched</span>
+                  <span class="user-avatar">{{ strtoupper(substr(trim($r->customer_name ?: ($r->customer_email ?: 'C')), 0, 1)) }}</span>
+                  <span>{{ $hasName ? ucwords(strtolower($r->customer_name)) : 'Cardholder #' . $r->card_number }}</span>
+                  <span class="badge b-ok" style="font-size:10px;margin-left:4px" title="Customer contact details available">Identified</span>
                 </div>
                 <div class="user-meta">
                   @if($r->customer_email)
@@ -384,7 +384,7 @@
             </div>
           </td>
 
-          {{-- Balance --}}
+          {{-- Balance & Reload History --}}
           <td>
             @php $bal = (float) $r->balance; @endphp
             @if($r->balance === null)
@@ -395,6 +395,13 @@
               <span class="balance-pill bal-zero">$0.00</span>
             @else
               <span class="balance-pill bal-neg">-${{ number_format(abs($bal), 2) }}</span>
+            @endif
+            @if(($r->reload_count ?? 0) > 0)
+              <div style="margin-top:4px">
+                <a href="{{ route('admin.transactions', ['card' => $r->card_number, 'store' => $r->store->store_id ?? null]) }}" style="font-size:10.5px;font-weight:700;color:var(--accent);text-decoration:none" title="View card reload history">
+                  +{{ $r->reload_count }} reload{{ $r->reload_count > 1 ? 's' : '' }} (${{ number_format((float) $r->reload_total, 2) }}) →
+                </a>
+              </div>
             @endif
           </td>
 

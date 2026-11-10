@@ -71,6 +71,11 @@ class LaundrycardSourceRecord extends Model
         return $this->hasMany(SyncAttempt::class, 'source_record_id');
     }
 
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(LaundrycardTransaction::class, 'source_record_id');
+    }
+
     public function isSynced(): bool
     {
         return in_array($this->processing_status, [self::SYNCED_CREATED, self::SYNCED_UPDATED], true);

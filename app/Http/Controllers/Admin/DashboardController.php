@@ -105,7 +105,10 @@ class DashboardController extends Controller
     public function records(Request $request)
     {
         $tab = $request->query('tab');
-        $q = Rec::with(['store', 'connection', 'contactMapping'])->latest('first_observed_at');
+        $q = Rec::with(['store', 'connection', 'contactMapping'])
+            ->withCount(['transactions as reload_count' => fn ($tx) => $tx->where('transaction_type', 'reload')])
+            ->withSum(['transactions as reload_total' => fn ($tx) => $tx->where('transaction_type', 'reload')], 'amount')
+            ->latest('first_observed_at');
 
         // Quick search by card number
         if ($search = trim((string) $request->query('search', $request->query('q')))) {

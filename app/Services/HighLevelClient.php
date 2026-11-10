@@ -195,8 +195,7 @@ class HighLevelClient
             }
             if ($s === 401 && $attempt === 0) {
                 // Token might have been invalidated early: force a refresh and retry once.
-                $connection->update(['expires_at' => now()->subSecond()]);
-                $connection = $this->oauth->refresh($connection);
+                $connection = $this->oauth->refresh($connection, force: true);
 
                 continue;
             }

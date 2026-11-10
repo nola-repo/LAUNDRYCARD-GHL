@@ -308,20 +308,20 @@ class HighLevelOAuthService
     }
 
     /** Ensure the access token is valid for at least the configured leeway. Refreshes under a lock. */
-    public function ensureFresh(GhlConnection $connection): GhlConnection
+    public function ensureFresh(GhlConnection $connection, ?int $leewaySeconds = null): GhlConnection
     {
         if ($connection->status === GhlConnection::REVOKED || $connection->status === GhlConnection::DISCONNECTED) {
             throw new AuthorizationException("GHL connection is {$connection->status}; reconnect required.", null, 'oauth.refresh');
         }
-        $leeway = (int) config('integration.ghl.refresh_leeway');
+        $leeway = $leewaySeconds ?? (int) config('integration.ghl.refresh_leeway', 300);
         if ($connection->access_token && $connection->expires_at && $connection->expires_at->gt(now()->addSeconds($leeway))) {
             return $connection;
         }
 
-        return $this->refresh($connection);
+        return $this->refresh($connection, $leeway);
     }
 
-    public function refresh(GhlConnection $connection): GhlConnection
+    public function refresh(GhlConnection $connection, ?int $leewaySeconds = null, bool $force = false): GhlConnection
     {
         $lock = Cache::lock('ghl_refresh:'.$connection->id, 30);
         try {
@@ -332,8 +332,12 @@ class HighLevelOAuthService
 
         try {
             $connection->refresh();
+            if ($connection->status === GhlConnection::REVOKED || $connection->status === GhlConnection::DISCONNECTED) {
+                throw new AuthorizationException("GHL connection is {$connection->status}; reconnect required.", null, 'oauth.refresh');
+            }
+            $leeway = $leewaySeconds ?? (int) config('integration.ghl.refresh_leeway', 300);
             // Another worker may have refreshed while we waited.
-            if ($connection->status === GhlConnection::ACTIVE && $connection->expires_at && $connection->expires_at->gt(now()->addSeconds((int) config('integration.ghl.refresh_leeway')))) {
+            if (! $force && $connection->status === GhlConnection::ACTIVE && $connection->access_token && $connection->expires_at && $connection->expires_at->gt(now()->addSeconds($leeway))) {
                 return $connection;
             }
             if (! $connection->refresh_token) {
@@ -345,7 +349,7 @@ class HighLevelOAuthService
                 $data = $this->tokenRequest([
                     'grant_type' => 'refresh_token',
                     'refresh_token' => $connection->refresh_token,
-                    'user_type' => 'Location',
+                    'user_type' => $connection->user_type ?: 'Location',
                     'redirect_uri' => config('integration.ghl.redirect_uri'),
                 ], 'oauth.refresh', $connection);
             } catch (AuthorizationException $e) {
@@ -353,23 +357,82 @@ class HighLevelOAuthService
                 throw $e;
             }
 
+            $scopes = $this->parseScopes($data['scope'] ?? null) ?: $connection->scopes;
             $connection->update([
                 'access_token' => $data['access_token'],
                 // GHL rotates refresh tokens; always store the latest one.
-                'refresh_token' => $data['refresh_token'] ?? $connection->refresh_token,
-                'expires_at' => now()->addSeconds((int) ($data['expires_in'] ?? 86400)),
-                'scopes' => $this->parseScopes($data['scope'] ?? null) ?: $connection->scopes,
+                'refresh_token' => ! empty($data['refresh_token']) ? $data['refresh_token'] : $connection->refresh_token,
+                'expires_at' => now()->addSeconds(max(60, (int) ($data['expires_in'] ?? 86400))),
+                'scopes' => $scopes,
+                'company_id' => $data['companyId'] ?? $connection->company_id,
+                'ghl_user_id' => $data['userId'] ?? $connection->ghl_user_id,
+                'user_type' => $data['userType'] ?? ($connection->user_type ?: 'Location'),
                 'status' => GhlConnection::ACTIVE,
                 'last_refreshed_at' => now(),
                 'last_error' => null,
                 'last_error_at' => null,
             ]);
+
+            $missingScopes = array_values(array_diff(['contacts.readonly', 'contacts.write'], $scopes ?? []));
+            if ($missingScopes !== []) {
+                $this->logger->log('oauth.scopes', [
+                    'level' => 'warning',
+                    'outcome' => 'missing_scopes',
+                    'ghl_location_id' => $connection->location_id,
+                    'message' => 'Refreshed token is missing required contact scopes: '.implode(', ', $missingScopes),
+                ]);
+            }
+
             $this->logger->log('oauth.refresh', ['outcome' => 'success', 'ghl_location_id' => $connection->location_id, 'message' => 'Access token refreshed.']);
 
             return $connection;
         } finally {
             optional($lock)->release();
         }
+    }
+
+    /**
+     * Proactively refresh all active connections whose tokens are expired or within the window.
+     *
+     * @return array{checked:int,refreshed:int,skipped:int,failed:int}
+     */
+    public function refreshExpiring(?int $windowSeconds = null, bool $force = false, ?string $onlyLocationId = null): array
+    {
+        $leeway = (int) config('integration.ghl.refresh_leeway', 300);
+        $window = $windowSeconds ?? max($leeway * 2, (int) config('integration.ghl.proactive_refresh_window', 7200));
+
+        $query = GhlConnection::where('status', GhlConnection::ACTIVE)
+            ->whereNotNull('refresh_token');
+
+        if ($onlyLocationId) {
+            $query->where('location_id', $onlyLocationId);
+        } elseif (! $force) {
+            $query->where(function ($q) use ($window) {
+                $q->whereNull('expires_at')
+                    ->orWhere('expires_at', '<=', now()->addSeconds($window));
+            });
+        }
+
+        $connections = $query->get();
+        $summary = ['checked' => $connections->count(), 'refreshed' => 0, 'skipped' => 0, 'failed' => 0];
+
+        foreach ($connections as $connection) {
+            try {
+                $fresh = $force
+                    ? $this->refresh($connection, $window, force: true)
+                    : $this->ensureFresh($connection, $window);
+                $fresh->refresh();
+                if ($fresh->tokenExpiryState() === 'valid') {
+                    $summary['refreshed']++;
+                } else {
+                    $summary['skipped']++;
+                }
+            } catch (Throwable) {
+                $summary['failed']++;
+            }
+        }
+
+        return $summary;
     }
 
     public function markUnusable(GhlConnection $connection, string $status, string $reason): void

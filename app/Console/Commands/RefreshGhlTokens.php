@@ -18,19 +18,20 @@ class RefreshGhlTokens extends Command
 
     public function handle(HighLevelOAuthService $oauth): int
     {
-        $leeway = (int) config('integration.ghl.refresh_leeway');
+        $leeway = (int) config('integration.ghl.refresh_leeway', 300);
         $dryRun = (bool) $this->option('dry-run');
+        $force  = (bool) $this->option('force');
 
-        // Proactive window: 2× the per-request leeway so the scheduler catches
-        // tokens well before ensureFresh() would have to do it on a live request.
-        $windowSeconds = $leeway * 2;
+        // Proactive window: default 2 hours ahead of expiry so scheduled runs
+        // rotate tokens well before ensureFresh() would have to do it on a live request.
+        $windowSeconds = max($leeway * 2, (int) config('integration.ghl.proactive_refresh_window', 7200));
 
         $query = GhlConnection::where('status', GhlConnection::ACTIVE)
             ->whereNotNull('refresh_token');
 
         if ($this->option('location')) {
             $query->where('location_id', $this->option('location'));
-        } elseif (! $this->option('force')) {
+        } elseif (! $force) {
             // Only tokens that are expired OR within the proactive window.
             $query->where(function ($q) use ($windowSeconds) {
                 $q->whereNull('expires_at')
@@ -67,9 +68,12 @@ class RefreshGhlTokens extends Command
             }
 
             try {
-                // Use the returned connection — ensureFresh() may return a
-                // refreshed model and the return value must not be discarded.
-                $fresh = $oauth->ensureFresh($connection);
+                // Pass the proactive window (or force=true) so tokens inside the
+                // window are rotated immediately rather than short-circuited by
+                // the 5-minute per-request leeway.
+                $fresh = $force
+                    ? $oauth->refresh($connection, $windowSeconds, force: true)
+                    : $oauth->ensureFresh($connection, $windowSeconds);
                 // Reload from DB to confirm persisted state.
                 $fresh->refresh();
 

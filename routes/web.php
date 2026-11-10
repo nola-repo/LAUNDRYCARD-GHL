@@ -37,19 +37,71 @@ $cronHandler = function (\Illuminate\Http\Request $request, string $task) {
     $startedAt = microtime(true);
 
     if ($task === 'discovery') {
+        $tokenSummary = app(\App\Services\HighLevelOAuthService::class)->refreshExpiring();
         $exit = \Illuminate\Support\Facades\Artisan::call('integration:discover');
         $run = \App\Models\SyncRun::where('type', 'discovery')->latest('id')->first();
+
+        $txSummary = null;
+        if (config('integration.transactions.enabled') && (microtime(true) - $startedAt) < 15) {
+            try {
+                $txSummary = app(\App\Services\TransactionDiscoveryService::class)->run();
+            } catch (\Throwable) {
+            }
+        }
+
+        $queueProcessed = 0;
+        if (
+            config('integration.sync.enabled')
+            && config('queue.default') === 'database'
+            && (microtime(true) - $startedAt) < 22
+            && \Illuminate\Support\Facades\DB::table('jobs')->exists()
+        ) {
+            for ($i = 0; $i < 3; $i++) {
+                if (! \Illuminate\Support\Facades\DB::table('jobs')->exists()) {
+                    break;
+                }
+                $qExit = \Illuminate\Support\Facades\Artisan::call('queue:work', [
+                    'connection'        => 'database',
+                    '--once'            => true,
+                    '--tries'           => 1,
+                    '--timeout'         => 15,
+                    '--stop-when-empty' => true,
+                ]);
+                if ($qExit === 0) {
+                    $queueProcessed++;
+                } else {
+                    break;
+                }
+                if ((microtime(true) - $startedAt) > 24) {
+                    break;
+                }
+            }
+        }
+
         $duration = (int) round((microtime(true) - $startedAt) * 1000);
 
         return response()->json([
-            'status'     => $exit === 0 ? 'completed' : 'failed',
-            'task'       => $task,
-            'duration_ms' => $duration,
-            'run_id'     => $run?->id,
-            'run_status' => $run?->status,
-            'stats'      => $run?->stats,
-            'error'      => $run?->error,
+            'status'          => $exit === 0 ? 'completed' : 'failed',
+            'task'            => $task,
+            'duration_ms'     => $duration,
+            'run_id'          => $run?->id,
+            'run_status'      => $run?->status,
+            'stats'           => $run?->stats,
+            'tokens'          => $tokenSummary,
+            'transactions'    => $txSummary,
+            'queue_processed' => $queueProcessed,
+            'error'           => $run?->error,
         ], $exit === 0 ? 200 : 500);
+    } elseif ($task === 'tokens') {
+        $tokenSummary = app(\App\Services\HighLevelOAuthService::class)->refreshExpiring();
+        $duration = (int) round((microtime(true) - $startedAt) * 1000);
+
+        return response()->json([
+            'status'      => $tokenSummary['failed'] === 0 ? 'completed' : 'partial',
+            'task'        => $task,
+            'duration_ms' => $duration,
+            'tokens'      => $tokenSummary,
+        ], $tokenSummary['failed'] === 0 ? 200 : 500);
     } elseif ($task === 'queue') {
         // Vercel serverless: process a small bounded batch of queued jobs.
         // Each invocation handles up to 5 jobs to stay within the 30s maxDuration.
@@ -109,8 +161,8 @@ $cronHandler = function (\Illuminate\Http\Request $request, string $task) {
     }
 };
 
-Route::get('/api/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue', 'transact'])->name('cron.task');
-Route::get('/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue', 'transact']);
+Route::get('/api/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue', 'transact', 'tokens'])->name('cron.task');
+Route::get('/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue', 'transact', 'tokens']);
 
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/', [DashboardController::class, 'overview'])->name('overview');

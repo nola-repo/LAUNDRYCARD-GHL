@@ -238,5 +238,107 @@ class TransactionIngestionTest extends TestCase
         $this->assertArrayHasKey('error', $result['stores']['0160']);
         $this->assertSame(1, $result['stores']['0679']['inserted']);
     }
+
+    public function test_card_reload_updates_synced_customer_balance_and_ghl_tags_in_real_time(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $store = \App\Models\LaundrycardStore::where('store_id', '0160')->first();
+        $conn  = \App\Models\GhlConnection::where('location_id', 'LOC_A')->first();
+
+        // Existing customer already synced to GHL with $8.00 balance (low tier)
+        $record = Rec::create([
+            'laundrycard_store_id'    => $store->id,
+            'ghl_connection_id'       => $conn->id,
+            'destination_location_id' => 'LOC_A',
+            'card_number'             => 'RELOAD_CARD_99',
+            'classification'          => Rec::NEW_OBSERVED,
+            'processing_status'       => Rec::SYNCED_CREATED,
+            'balance'                 => '8.00',
+            'eligibility_status'      => Rec::BALANCE_ELIGIBLE,
+            'eligibility_reason'      => 'positive_balance',
+            'customer_name'           => 'Alex Rivera',
+            'customer_email'          => 'alex@example.test',
+            'email_hash'              => \App\Support\Normalizer::hash('alex@example.test'),
+            'first_observed_at'       => now()->subDays(2),
+            'last_observed_at'        => now()->subDays(2),
+            'synced_at'               => now()->subDays(2),
+        ]);
+
+        \App\Models\ContactMapping::create([
+            'source_record_id'  => $record->id,
+            'ghl_connection_id' => $conn->id,
+            'location_id'       => 'LOC_A',
+            'ghl_contact_id'    => 'GHL_CONTACT_99',
+            'action'            => 'created',
+            'idempotency_key'   => hash('sha256', 'LOC_A|0160|RELOAD_CARD_99'),
+            'synced_at'         => now()->subDays(2),
+        ]);
+
+        // Customer reloads $25.00 via credit card (TransType=3), bringing balance to $33.00
+        $reloadTime = now()->utc()->subMinutes(5)->format('Y-m-d\TH:i:s');
+        $this->httpFake($this->lcAuthFake() + [
+            'https://live.laundrycard.com/api/transact*' => Http::response([
+                [
+                    'ID'          => 9001,
+                    'CardNumber'  => 'RELOAD_CARD_99',
+                    'DateTime'    => $reloadTime,
+                    'TransType'   => '3',
+                    'TransAmount' => 25.00,
+                    'Balance'     => 33.00,
+                    'MachNo'      => '1001',
+                ],
+            ]),
+        ] + $this->ghlFake([
+            'alex@example.test' => [
+                'id'        => 'GHL_CONTACT_99',
+                'email'     => 'alex@example.test',
+                'firstName' => 'Alex',
+                'lastName'  => 'Rivera',
+                'tags'      => ['laundrycard', 'store-0160', 'balance-positive', 'balance-low'],
+            ],
+        ]));
+
+        $svc    = app(TransactionDiscoveryService::class);
+        $result = $svc->run('0160');
+
+        $this->assertSame(1, $result['reloaded_queued']);
+
+        $record->refresh();
+        $this->assertSame('33.00', (string) $record->balance);
+        $this->assertSame(Rec::SYNCED_UPDATED, $record->processing_status);
+
+        $put = $this->ghlSent('/contacts/GHL_CONTACT_99')->filter(fn ($p) => $p[0]->method() === 'PUT')->first()[0];
+        $this->assertSame('PUT', $put->method());
+        $this->assertContains('laundrycard', $put['tags']);
+        $this->assertContains('store-0160', $put['tags']);
+        $this->assertContains('balance-positive', $put['tags']);
+        $this->assertContains('balance-high', $put['tags']);
+        $this->assertContains('reloaded-30d', $put['tags']);
+        $this->assertContains('active-30d', $put['tags']);
+        $this->assertNotContains('balance-low', $put['tags'], 'Stale low-balance tag is replaced by high-balance tag after reload');
+    }
+
+    public function test_offline_store_with_live_enabled_false_is_skipped_without_calling_api(): void
+    {
+        $online  = $this->store('0160');
+        $offline = $this->store('0679');
+        $offline->update(['live_enabled' => false]);
+
+        $calledStores = [];
+        $this->httpFake($this->lcAuthFake() + [
+            'https://live.laundrycard.com/api/transact*' => function (Request $r) use (&$calledStores) {
+                parse_str(parse_url($r->url(), PHP_URL_QUERY) ?? '', $q);
+                $calledStores[] = (int) ($q['StoreID'] ?? 0);
+
+                return Http::response([]);
+            },
+        ]);
+
+        $svc    = app(TransactionDiscoveryService::class);
+        $result = $svc->run();
+
+        $this->assertSame([160], $calledStores, 'Offline store 0679 must be skipped so the API is not exhausted');
+        $this->assertSame('store_live_disabled', $result['stores']['0679']['skipped'] ?? null);
+    }
 }
 

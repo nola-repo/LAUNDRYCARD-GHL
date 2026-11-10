@@ -81,6 +81,27 @@ class CustomerDiscoveryService
                 ->when($onlyStoreId, fn ($q) => $q->where('store_id', Normalizer::storeId($onlyStoreId)))->orderBy('store_id')->get();
 
             foreach ($stores as $store) {
+                if ($store->live_enabled === false && $store->baseline_completed_at !== null && ! $onlyStoreId) {
+                    $stats['stores'][$store->store_id] = [
+                        'skipped' => 'store_live_disabled',
+                        'message' => 'Store LiveEnabled=false; on-premise X-Changer VPN is offline at CCI Live.',
+                    ];
+                    if (! $readOnly) {
+                        $store->update([
+                            'last_scan_at'     => now(),
+                            'last_scan_status' => 'skipped_offline',
+                            'last_scan_error'  => 'Store LiveEnabled=false; on-premise X-Changer VPN is offline at CCI Live.',
+                        ]);
+                    }
+                    $this->logger->log('discovery.store', [
+                        'store_id' => $store->store_id,
+                        'outcome'  => 'skipped',
+                        'message'  => 'Skipped card poll because store LiveEnabled=false (on-premise X-Changer VPN offline).',
+                    ]);
+
+                    continue;
+                }
+
                 try {
                     $res = $this->scanStore($store, $readOnly);
                     $stats['stores_scanned']++;
@@ -90,9 +111,13 @@ class CustomerDiscoveryService
                     $stats['stores'][$store->store_id] = $res;
                 } catch (Throwable $e) {
                     $stats['stores_failed']++;
-                    $stats['stores'][$store->store_id] = ['error' => class_basename($e)];
+                    $errMsg = $e->getMessage();
+                    if ($store->live_enabled === false && str_contains($errMsg, 'HTTP 500')) {
+                        $errMsg .= ' (Store LiveEnabled=false; on-premise X-Changer VPN is offline at CCI Live)';
+                    }
+                    $stats['stores'][$store->store_id] = ['error' => class_basename($e), 'message' => \App\Support\Sanitizer::string($errMsg, 200)];
                     if (! $readOnly) {
-                        $store->update(['last_scan_at' => now(), 'last_scan_status' => 'failed', 'last_scan_error' => \App\Support\Sanitizer::string($e->getMessage(), 300)]);
+                        $store->update(['last_scan_at' => now(), 'last_scan_status' => 'failed', 'last_scan_error' => \App\Support\Sanitizer::string($errMsg, 300)]);
                     }
                     $this->logger->error('discovery.store', $e, ['store_id' => $store->store_id]);
                     // Progress is NOT advanced for this store; the next run rescans it fully.
@@ -212,38 +237,23 @@ class CustomerDiscoveryService
                 continue;
             }
 
-            $eval = $this->evaluateCardBalance($card);
-            $eligibility = $eval['eligibility'];
-            $reason = $eval['reason'];
-            $balance = $eval['balance'];
-
-            $email = Normalizer::email($card['email'] ?? null);
-            $phone = Normalizer::phone($card['phone'] ?? null);
-
-            $status = ($eligibility === Rec::BALANCE_ELIGIBLE) ? Rec::PENDING : Rec::HELD;
-            $holdReason = ($eligibility === Rec::BALANCE_ELIGIBLE) ? null : $reason;
-
-            if ($status === Rec::HELD) {
-                $res['held']++;
-            }
-
-            Rec::create([
+            $record = Rec::create([
                 'laundrycard_store_id' => $store->id,
                 'card_number' => $card['card_number'],
                 'source_timestamp' => $card['source_timestamp'],
                 'first_observed_at' => now(),
                 'last_observed_at' => now(),
                 'classification' => Rec::NEW_OBSERVED,
-                'processing_status' => $status,
-                'hold_reason' => $holdReason,
-                'eligibility_status' => $eligibility,
-                'eligibility_reason' => $reason,
-                'balance' => $balance,
-                'customer_email' => $email,
-                'email_hash' => $email ? Normalizer::hash($email) : null,
-                'customer_phone' => $phone,
-                'phone_hash' => $phone ? Normalizer::hash($phone) : null,
+                'processing_status' => Rec::HELD,
+                'hold_reason' => 'balance_not_verified',
+                'eligibility_status' => Rec::BALANCE_UNKNOWN,
+                'eligibility_reason' => 'balance_not_verified',
             ]);
+
+            $this->observe($store, $record, $card, isNew: true);
+            if ($record->processing_status === Rec::HELD) {
+                $res['held']++;
+            }
         }
 
         if (! $readOnly) {
@@ -385,7 +395,11 @@ class CustomerDiscoveryService
     {
         $balance = $card['balance'] ?? null;
         $present = (bool) ($card['balance_present'] ?? false);
-        $customer = ['name' => null, 'email' => $card['email'] ?? null, 'phone' => null];
+        $customer = [
+            'name'  => $card['name'] ?? null,
+            'email' => $card['email'] ?? null,
+            'phone' => $card['phone'] ?? null,
+        ];
 
         if (
             $isNew
@@ -395,7 +409,11 @@ class CustomerDiscoveryService
             try {
                 $account = $this->client->account($store->store_id, $record->card_number);
                 if ($account) {
-                    $customer = $account + $customer;
+                    $customer = [
+                        'name'  => $account['name'] ?: $customer['name'],
+                        'email' => $account['email'] ?: $customer['email'],
+                        'phone' => $account['phone'] ?: $customer['phone'],
+                    ];
                     if ($account['balance_present'] ?? false) {
                         $balance = $account['balance'];
                         $present = true;
@@ -478,6 +496,9 @@ class CustomerDiscoveryService
                 $attrs['processing_status'] = Rec::PENDING;
                 $attrs['hold_reason'] = null;
             }
+        } elseif ($eligibility === Rec::BALANCE_ELIGIBLE && $record->isSynced() && $balanceChanged) {
+            $attrs['processing_status'] = Rec::PENDING;
+            $attrs['hold_reason'] = null;
         } elseif ($eligibility !== Rec::BALANCE_ELIGIBLE && ! $record->isSynced()) {
             if ($record->classification === Rec::BASELINE && config('integration.discovery.initial_import') !== 'import') {
                 $attrs['processing_status'] = Rec::BASELINE_SKIPPED;

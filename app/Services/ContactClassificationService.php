@@ -226,9 +226,9 @@ class ContactClassificationService
             }
         }
 
-        // Activity (last vend)
+        // Activity (last vend or reload)
         $lastVend = Tx::where('source_record_id', $record->id)
-            ->where('transaction_type', Tx::TYPE_VEND)
+            ->whereIn('transaction_type', [Tx::TYPE_VEND, Tx::TYPE_RELOAD])
             ->orderByDesc('occurred_at')
             ->value('occurred_at');
 

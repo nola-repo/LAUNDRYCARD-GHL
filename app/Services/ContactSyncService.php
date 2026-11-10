@@ -106,10 +106,12 @@ class ContactSyncService
             $attempt->update(['ghl_connection_id' => $connection->id, 'stage' => 'route']);
             $this->logger->log('sync.route', $base + ['outcome' => 'routed', 'message' => 'Routed via verified mapping.']);
 
-            // 2. Preconditions.
+            // 2. Preconditions — create/update contact with whatever contact details exist (email, phone, or name).
             $email = Normalizer::email($record->customer_email);
             $phone = Normalizer::phone($record->customer_phone);
-            if (! $email && ! $phone) {
+            [$first, $last] = Normalizer::splitName($record->customer_name);
+            $hasName = $first !== null && $first !== '';
+            if (! $email && ! $phone && ! $hasName) {
                 return $this->finish($record, $attempt, Rec::SKIPPED, 'skipped', 'no_contact_identifier', 'no_contact_identifier', $base);
             }
             $scopes = $connection->scopes ?? [];
@@ -128,8 +130,8 @@ class ContactSyncService
             }
 
 
-            // 4. Look for an existing contact.
-            if (! $existing) {
+            // 4. Look for an existing contact when email or phone is available.
+            if (! $existing && ($email || $phone)) {
                 $attempt->update(['stage' => 'match']);
                 $match = $this->matching->match($connection, $record);
                 $this->logger->log('sync.match', $base + ['outcome' => $match['result'], 'message' => $match['reason'] ?? ($match['matched_on'] ? 'matched on '.$match['matched_on'] : 'no existing contact')]);

@@ -201,7 +201,10 @@ class LaundryCardClient
     {
         $query = array_filter(['StoreID' => (int) $storeId, 'MinDateTime' => $minDateTime, 'MaxDateTime' => $maxDateTime]);
 
-        return $this->listOf($this->get('/api/transact', $query, 'laundrycard.transactions'), 'laundrycard.transactions');
+        return $this->listOf(
+            $this->get('/api/transact', $query, 'laundrycard.transactions', ['store_id' => Normalizer::storeId($storeId)]),
+            'laundrycard.transactions'
+        );
     }
 
     // ------------------------------------------------------------------ internals
@@ -216,6 +219,9 @@ class LaundryCardClient
                 $response = $this->baseRequest()->withToken($token)->get($path, $query);
             } catch (ConnectionException $e) {
                 $this->logger->api('laundrycard', 'GET', $this->safePath($path), null, $this->ms($started), $logFields);
+                if ($attempt === 0) {
+                    continue;
+                }
                 throw new RetryableException('LaundryCard API unreachable or timed out: '.Sanitizer::string($e->getMessage(), 200), null, $stage);
             }
             $this->logger->api('laundrycard', 'GET', $this->safePath($path), $response->status(), $this->ms($started), $logFields);
@@ -225,6 +231,9 @@ class LaundryCardClient
                 Cache::forget(self::TOKEN_CACHE_KEY);
                 $token = $this->authenticate();
 
+                continue;
+            }
+            if (in_array($response->status(), [408, 502, 503, 504], true) && $attempt === 0) {
                 continue;
             }
             if ($response->status() === 404 && $allow404) {
@@ -257,16 +266,28 @@ class LaundryCardClient
         if ($s < 400) {
             return;
         }
+        $upstreamMsg = null;
+        try {
+            $json = $response->json();
+            if (is_array($json)) {
+                $upstreamMsg = $json['message'] ?? $json['Message'] ?? $json['error'] ?? null;
+            }
+        } catch (Throwable) {
+        }
+        $detail = is_string($upstreamMsg) && trim($upstreamMsg) !== ''
+            ? ': '.Sanitizer::string(trim($upstreamMsg), 200)
+            : '.';
+
         if ($s === 429) {
             throw new RetryableException('LaundryCard rate limit reached.', 429, $stage, (int) ($response->header('Retry-After') ?: 60));
         }
         if ($s === 401 || $s === 403) {
-            throw new AuthorizationException("LaundryCard denied access (HTTP $s).", $s, $stage);
+            throw new AuthorizationException("LaundryCard denied access (HTTP $s){$detail}", $s, $stage);
         }
         if ($s >= 500 || $s === 408) {
-            throw new RetryableException("LaundryCard server error (HTTP $s).", $s, $stage);
+            throw new RetryableException("LaundryCard server error (HTTP $s){$detail}", $s, $stage);
         }
-        throw new IntegrationException("LaundryCard request failed (HTTP $s).", $s, $stage);
+        throw new IntegrationException("LaundryCard request failed (HTTP $s){$detail}", $s, $stage);
     }
 
     private function listOf(mixed $json, string $stage): array
@@ -330,12 +351,17 @@ class LaundryCardClient
             }
         }
 
+        $rawName = $this->field($r, 'Name') ?? trim(($this->field($r, 'FirstName') ?? '').' '.($this->field($r, 'LastName') ?? ''));
+        $name = is_string($rawName) && trim($rawName) !== '' ? trim($rawName) : null;
+
         return [
             'store_id' => Normalizer::storeId($this->field($r, 'StoreID') ?? $storeId),
             'card_number' => (string) $number,
             'status' => $r['Status'] ?? null,
             'source_timestamp' => $ts,
+            'name' => $name,
             'email' => Normalizer::email($this->field($r, 'Email')),
+            'phone' => $this->field($r, 'Phone') ?? $this->field($r, 'PhoneNumber'),
             // CCI documents Balance as the card's dollar balance (decimal).
             'balance' => $this->normalizeBalance($this->field($r, 'Balance')),
             'balance_present' => $this->hasField($r, 'Balance'),

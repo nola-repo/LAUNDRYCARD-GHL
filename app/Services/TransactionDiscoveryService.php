@@ -107,10 +107,22 @@ class TransactionDiscoveryService
 
         $storeResults = [];
         $storesFailed = 0;
+        $reloadedQueued = 0;
 
         foreach ($stores as $store) {
+            if ($store->live_enabled === false && ! $onlyStoreId) {
+                $storeResults[$store->store_id] = [
+                    'skipped' => 'store_live_disabled',
+                    'message' => 'Store LiveEnabled=false; on-premise X-Changer VPN is offline at CCI Live.',
+                ];
+
+                continue;
+            }
+
             try {
-                $storeResults[$store->store_id] = $this->ingestStore($store, $correlation);
+                $res = $this->ingestStore($store, $correlation);
+                $storeResults[$store->store_id] = $res;
+                $reloadedQueued += (int) ($res['reloaded_queued'] ?? 0);
             } catch (Throwable $e) {
                 $storesFailed++;
                 $storeResults[$store->store_id] = ['error' => class_basename($e), 'message' => Sanitizer::string($e->getMessage(), 200)];
@@ -118,14 +130,22 @@ class TransactionDiscoveryService
             }
         }
 
+        if ($reloadedQueued > 0 && config('integration.sync.enabled')) {
+            try {
+                app(CustomerDiscoveryService::class)->dispatchPending();
+            } catch (Throwable $e) {
+                $this->logger->error('transactions.dispatch', $e);
+            }
+        }
+
         $status = $storesFailed === 0 ? 'completed' : (count($storeResults) > $storesFailed ? 'partial' : 'failed');
         $run->update([
             'status'     => $status,
             'finished_at' => now(),
-            'stats'      => ['stores' => $storeResults, 'stores_failed' => $storesFailed],
+            'stats'      => ['stores' => $storeResults, 'stores_failed' => $storesFailed, 'reloaded_queued' => $reloadedQueued],
         ]);
 
-        return ['run_id' => $run->id, 'stores' => $storeResults];
+        return ['run_id' => $run->id, 'stores' => $storeResults, 'reloaded_queued' => $reloadedQueued];
     }
 
     /**
@@ -191,6 +211,9 @@ class TransactionDiscoveryService
         // Attempt to link unlinked transactions to source records.
         $this->linkToSourceRecords($store);
 
+        // If new reload/bonus transactions arrived, update linked card balances and queue for real-time GHL sync.
+        $reloadedQueued = $inserted > 0 ? $this->syncReloadedRecords($store, $minDt) : 0;
+
         $this->logger->log('transactions.store', [
             'store_id' => $store->store_id,
             'outcome'  => 'completed',
@@ -198,6 +221,7 @@ class TransactionDiscoveryService
             'context'  => [
                 'inserted'        => $inserted,
                 'duplicates'      => $duplicates,
+                'reloaded_queued' => $reloadedQueued,
                 'fields_confirmed' => $fieldsConfirmed,
                 'window_start'    => $minDt,
                 'window_end'      => $maxDt,
@@ -207,6 +231,7 @@ class TransactionDiscoveryService
         return [
             'inserted'         => $inserted,
             'duplicate'        => $duplicates,
+            'reloaded_queued'  => $reloadedQueued,
             'window_start'     => $minDt,
             'window_end'       => $maxDt,
             'cursor_advanced'  => $cursorAdvanced,
@@ -401,6 +426,72 @@ class TransactionDiscoveryService
                 ->whereNull('source_record_id')
                 ->update(['source_record_id' => $recordId]);
         }
+    }
+
+    /**
+     * When a customer reloads their card, update their source record balance/eligibility
+     * and queue them for real-time GHL contact tag & custom-field synchronization.
+     */
+    private function syncReloadedRecords(LaundrycardStore $store, string $windowStartIso): int
+    {
+        $since = CarbonImmutable::parse($windowStartIso, 'UTC')->toDateTimeString();
+
+        $reloadTxs = Tx::where('laundrycard_store_id', $store->id)
+            ->whereNotNull('source_record_id')
+            ->whereIn('transaction_type', [Tx::TYPE_RELOAD, Tx::TYPE_BONUS])
+            ->where('occurred_at', '>=', $since)
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('source_record_id');
+
+        if ($reloadTxs->isEmpty()) {
+            return 0;
+        }
+
+        $records = Rec::whereIn('id', $reloadTxs->pluck('source_record_id'))->get()->keyBy('id');
+        $queued = 0;
+
+        foreach ($reloadTxs as $tx) {
+            $record = $records->get($tx->source_record_id);
+            if (! $record) {
+                continue;
+            }
+
+            $newBalance = $record->balance;
+            if ($tx->balance_after !== null && (float) $tx->balance_after >= 0) {
+                $newBalance = number_format((float) $tx->balance_after, 2, '.', '');
+            } elseif ($tx->transaction_type === Tx::TYPE_RELOAD && $tx->amount !== null && (float) $tx->amount > 0 && ($record->balance === null || (float) $record->balance <= 0)) {
+                $newBalance = number_format(max(0.0, (float) $record->balance) + (float) $tx->amount, 2, '.', '');
+            }
+
+            $updates = ['last_observed_at' => now()];
+            $eligibility = $record->eligibility_status;
+
+            if ($newBalance !== null) {
+                $updates['balance'] = $newBalance;
+                if ((float) $newBalance > 0) {
+                    $eligibility = Rec::BALANCE_ELIGIBLE;
+                    $updates['eligibility_status'] = Rec::BALANCE_ELIGIBLE;
+                    $updates['eligibility_reason'] = ($record->balance !== null && (float) $record->balance <= 0)
+                        ? 'balance_became_positive'
+                        : 'positive_balance';
+                }
+            }
+
+            $hasIdentifier = filled($record->customer_email) || filled($record->customer_phone) || filled($record->customer_name);
+            $isEligible = $eligibility === Rec::BALANCE_ELIGIBLE && $newBalance !== null && (float) $newBalance > 0;
+
+            if ($isEligible && $hasIdentifier && ($record->isSynced() || in_array($record->processing_status, [Rec::HELD, Rec::BASELINE_SKIPPED], true))) {
+                $updates['processing_status'] = Rec::PENDING;
+                $updates['hold_reason'] = null;
+                $queued++;
+            }
+
+            $record->update($updates);
+        }
+
+        return $queued;
     }
 
     // ------------------------------------------------------------------ field helpers

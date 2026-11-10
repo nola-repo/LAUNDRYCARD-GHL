@@ -157,10 +157,26 @@ trait IntegrationHelpers
                     return Http::response(['contact' => ['id' => 'CONTACT_'.$n] + $r->data()], 201);
                 }
 
-                // GET/PUT /contacts/{id}, /oauth/token, /locations/{id}, etc.
+                // GET /contacts/{id}
+                if ($r->method() === 'GET' && preg_match('#^/contacts/([^/]+)$#', $path, $m)) {
+                    $cid = $m[1];
+                    foreach (array_merge(array_values($byEmail), array_values($byPhone)) as $c) {
+                        if (($c['id'] ?? null) === $cid) {
+                            return Http::response(['contact' => $c]);
+                        }
+                    }
+
+                    return Http::response(['contact' => ['id' => $cid]]);
+                }
+
+                // PUT /contacts/{id}, /locations/{id}, etc.
                 return Http::response(['contact' => ['id' => 'X']]);
             },
         ];
     }
 
+    protected function ghlSent(string $prefix = ''): \Illuminate\Support\Collection
+    {
+        return Http::recorded(fn (Request $r) => str_starts_with($r->url(), 'https://services.leadconnectorhq.com'.$prefix));
+    }
 }

@@ -127,6 +127,10 @@
           <div class="health-card-status-badge bad">
             <span class="dot bad"></span> Credentials Missing
           </div>
+        @elseif($lastLcApi && $lastLcApi->http_status && $lastLcApi->http_status >= 400)
+          <div class="health-card-status-badge warn">
+            <span class="dot warn"></span> Degraded — Last call HTTP {{ $lastLcApi->http_status }}
+          </div>
         @elseif($lastLcApi && $lastLcApi->created_at->gt(now()->subHours(1)))
           <div class="health-card-status-badge ok">
             <span class="dot ok"></span> Active — Called {{ $lastLcApi->created_at->diffForHumans() }}
@@ -794,7 +798,14 @@
           </div>
 
           <div class="branch-card-footer">
-            <span class="muted">Scanned Records</span>
+            <div>
+              <span class="muted">Scanned Records</span>
+              @if($st->live_enabled === false || $st->last_scan_status === 'failed')
+                <div style="font-size:10.5px; color:var(--warn-light); font-weight:700; margin-top:2px" title="{{ $st->last_scan_error ?? 'Store VPN offline at CCI Live' }}">
+                  ● Store VPN Offline (LiveEnabled=false)
+                </div>
+              @endif
+            </div>
             <span class="branch-record-count">{{ number_format($st->source_records_count ?? 0) }}</span>
           </div>
         </div>

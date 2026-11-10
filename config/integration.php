@@ -53,8 +53,10 @@ return [
         'scopes' => preg_split('/[\\s,]+/', trim((string) env('GHL_SCOPES', 'contacts.readonly contacts.write locations.readonly locations.customfields.readonly oauth.readonly')), -1, PREG_SPLIT_NO_EMPTY),
         'timeout' => (int) env('GHL_TIMEOUT', 20),
         'state_ttl_seconds' => 600,
-        // Refresh when fewer than this many seconds remain.
-        'refresh_leeway' => 300,
+        // Refresh when fewer than this many seconds remain on a live API call.
+        'refresh_leeway' => (int) env('GHL_REFRESH_LEEWAY', 300),
+        // Proactive background refresh window (default 2 hours ahead of expiry).
+        'proactive_refresh_window' => (int) env('GHL_PROACTIVE_REFRESH_WINDOW', 7200),
         'default_country_code' => env('GHL_DEFAULT_COUNTRY_CODE', '1'),
         'contact_source' => 'LaundryCard',
         'contact_tags' => ['laundrycard'],
@@ -86,7 +88,7 @@ return [
     | until actual transaction field names and type codes are confirmed.
     */
     'transactions' => [
-        'enabled'              => (bool) env('INTEGRATION_TRANSACTION_INGESTION_ENABLED', false),
+        'enabled'              => (bool) env('INTEGRATION_TRANSACTION_INGESTION_ENABLED', true),
         'window_hours'         => (int) env('INTEGRATION_TRANSACTION_WINDOW_HOURS', 1),
         'max_lookback_hours'   => (int) env('INTEGRATION_TRANSACTION_MAX_LOOKBACK_HOURS', 48),
         'overlap_minutes'      => (int) env('INTEGRATION_TRANSACTION_OVERLAP_MINUTES', 10),
@@ -110,8 +112,8 @@ return [
     ],
 
     'sync' => [
-        // Real contact writes remain off until credentials and routing have been verified.
-        'enabled' => (bool) env('INTEGRATION_CONTACT_SYNC_ENABLED', false),
+        // Real contact writes enabled for live GHL location synchronization.
+        'enabled' => (bool) env('INTEGRATION_CONTACT_SYNC_ENABLED', true),
         'tries' => 5,
         'backoff' => [30, 120, 300, 900],
         'dispatch_batch' => 200,

@@ -23,11 +23,11 @@ if (config('integration.discovery.enrich_with_account_detail')) {
 }
 
 // Proactively rotate GHL OAuth tokens before they expire.
-// Runs every 6 hours; tokens expire every 24 h so this provides 4 refresh
-// opportunities per day, with ensureFresh() leeway (300 s) as the final guard
-// on each live API call.
+// Runs every 30 minutes with a 2-hour proactive refresh window so tokens
+// are rotated well ahead of expiry, with ensureFresh() leeway (300 s) as
+// the final guard on each live API call.
 Schedule::command('ghl:refresh-tokens')
-    ->everySixHours()
+    ->everyThirtyMinutes()
     ->withoutOverlapping(5)
     ->onOneServer()
     ->runInBackground();

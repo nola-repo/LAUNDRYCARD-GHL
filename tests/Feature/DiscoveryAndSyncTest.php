@@ -456,6 +456,54 @@ class DiscoveryAndSyncTest extends TestCase
         $store679 = LaundrycardStore::where('store_id', '0679')->first();
         $this->assertSame('failed', $store679->last_scan_status);
         $this->assertNotNull($store679->last_scan_error);
+        $this->assertStringContainsString('Internal server error', $store679->last_scan_error);
+    }
+
+    public function test_laundrycard_upstream_error_detail_and_store_id_are_logged_and_transient_503_retries(): void
+    {
+        $attempts = 0;
+        $this->httpFake([
+            'https://live.laundrycard.com/*' => function (Request $r) use (&$attempts) {
+                $path = parse_url($r->url(), PHP_URL_PATH);
+                if (str_contains($path, '/api/AuthToken')) {
+                    return Http::response(['Token' => 'LC_TOKEN_123']);
+                }
+                if (str_contains($path, '/api/cards')) {
+                    $attempts++;
+                    if ($attempts === 1) {
+                        return Http::response('Gateway timeout', 503);
+                    }
+
+                    return Http::response([$this->card('7001', 'retry.ok@example.test', null, 160)]);
+                }
+                if (str_contains($path, '/api/transact')) {
+                    return Http::response(['message' => 'A InvalidOperationException occurred on the server.', 'details' => null], 500);
+                }
+
+                return Http::response([]);
+            },
+        ]);
+
+        $client = app(\App\Services\LaundryCardClient::class);
+        $cards = $client->cards('0160');
+        $this->assertCount(1, $cards);
+        $this->assertSame(2, $attempts, 'Transient 503 must be retried once');
+
+        try {
+            $client->transactions('0679', '2026-11-10T00:00:00', '2026-11-10T01:00:00');
+            $this->fail('Expected RetryableException for HTTP 500 on /api/transact');
+        } catch (\App\Exceptions\Integration\RetryableException $e) {
+            $this->assertSame(500, $e->httpStatus);
+            $this->assertStringContainsString('InvalidOperationException', $e->getMessage());
+        }
+
+        $txEvent = IntegrationEvent::where('stage', 'api.laundrycard')
+            ->where('message', 'GET /api/transact')
+            ->latest('id')
+            ->first();
+        $this->assertNotNull($txEvent);
+        $this->assertSame('0679', $txEvent->store_id);
+        $this->assertSame(500, $txEvent->http_status);
     }
 
     public function test_baseline_records_never_flip_to_pending_on_subsequent_scans(): void
@@ -488,6 +536,68 @@ class DiscoveryAndSyncTest extends TestCase
         $this->assertSame(Rec::BASELINE_SKIPPED, $rec->processing_status);
         $this->assertSame('initial_import_disabled', $rec->hold_reason);
         $this->assertCount(0, $this->ghlSent());
+    }
+
+    public function test_auto_contact_creation_works_with_name_only_or_phone_only_details(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $store = LaundrycardStore::where('store_id', '0160')->first();
+
+        // 1. Customer with name only (no email, no phone)
+        $nameOnly = Rec::create([
+            'laundrycard_store_id' => $store->id,
+            'card_number'          => 'NAME_ONLY_01',
+            'classification'       => Rec::NEW_OBSERVED,
+            'processing_status'    => Rec::PENDING,
+            'balance'              => '15.00',
+            'eligibility_status'   => Rec::BALANCE_ELIGIBLE,
+            'eligibility_reason'   => 'positive_balance',
+            'customer_name'        => 'Maria Garcia',
+            'first_observed_at'    => now(),
+            'last_observed_at'     => now(),
+        ]);
+
+        // 2. Customer with phone only (no email, no name)
+        $phoneOnly = Rec::create([
+            'laundrycard_store_id' => $store->id,
+            'card_number'          => 'PHONE_ONLY_02',
+            'classification'       => Rec::NEW_OBSERVED,
+            'processing_status'    => Rec::PENDING,
+            'balance'              => '30.00',
+            'eligibility_status'   => Rec::BALANCE_ELIGIBLE,
+            'eligibility_reason'   => 'positive_balance',
+            'customer_phone'       => '+19735550999',
+            'phone_hash'           => \App\Support\Normalizer::hash('+19735550999'),
+            'first_observed_at'    => now(),
+            'last_observed_at'     => now(),
+        ]);
+
+        $this->httpFake($this->ghlFake());
+
+        $sync = app(ContactSyncService::class);
+        $r1 = $sync->process($nameOnly);
+        $r2 = $sync->process($phoneOnly);
+
+        $this->assertSame('created', $r1['outcome']);
+        $this->assertSame(Rec::SYNCED_CREATED, $nameOnly->fresh()->processing_status);
+
+        $this->assertSame('created', $r2['outcome']);
+        $this->assertSame(Rec::SYNCED_CREATED, $phoneOnly->fresh()->processing_status);
+
+        $posts = $this->ghlSent('/contacts')->filter(fn ($p) => $p[0]->method() === 'POST')->values();
+        $this->assertCount(2, $posts);
+
+        $firstPayload = $posts[0][0]->data();
+        $this->assertSame('Maria', $firstPayload['firstName']);
+        $this->assertSame('Garcia', $firstPayload['lastName']);
+        $this->assertContains('laundrycard', $firstPayload['tags']);
+        $this->assertContains('store-0160', $firstPayload['tags']);
+
+        $secondPayload = $posts[1][0]->data();
+        $this->assertSame('+19735550999', $secondPayload['phone']);
+        $this->assertContains('laundrycard', $secondPayload['tags']);
+        $this->assertContains('store-0160', $secondPayload['tags']);
+        $this->assertContains('balance-high', $secondPayload['tags']);
     }
 
     private function pendingRecord(string $card, string $email, ?string $name = null, ?string $phone = null): Rec

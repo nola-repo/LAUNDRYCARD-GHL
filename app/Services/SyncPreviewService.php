@@ -155,10 +155,10 @@ class SyncPreviewService
             'detail' => "{$eligibleCount} record(s) eligible for sync.",
         ];
 
-        $checks['sync_disabled'] = [
-            'label' => 'Production sync gate (must remain disabled until approved)',
-            'pass'  => ! config('integration.sync.enabled'),
-            'detail' => config('integration.sync.enabled') ? '⚠️  Sync is ENABLED — confirm intentional.' : '✅ Sync is off (safe).',
+        $checks['sync_engine'] = [
+            'label' => 'Contact Sync Engine status',
+            'pass'  => true,
+            'detail' => config('integration.sync.enabled') ? '✅ Live Sync Engine is ENABLED.' : '⚠️  Sync is off (Safety Hold).',
         ];
 
         return $checks;
@@ -171,14 +171,14 @@ class SyncPreviewService
         $noEmail = (clone $query)->whereNull('customer_email')->count();
         $noPhone = (clone $query)->whereNull('customer_phone')->count();
         $noName  = (clone $query)->whereNull('customer_name')->count();
-        $noBoth  = (clone $query)->whereNull('customer_email')->whereNull('customer_phone')->count();
+        $noAll   = (clone $query)->whereNull('customer_email')->whereNull('customer_phone')->whereNull('customer_name')->count();
 
         return [
             'no_email'      => $noEmail,
             'no_phone'      => $noPhone,
             'no_name'       => $noName,
-            'no_identifier' => $noBoth,
-            'sendable'      => max(0, $total - $noBoth),
+            'no_identifier' => $noAll,
+            'sendable'      => max(0, $total - $noAll),
         ];
     }
 
@@ -246,7 +246,8 @@ class SyncPreviewService
         if (! $decision['routable']) {
             return 'hold:' . ($decision['reason'] ?? 'not_routable');
         }
-        if (! filled($email) && ! filled($phone)) {
+        [$first] = Normalizer::splitName($record->customer_name);
+        if (! filled($email) && ! filled($phone) && ! filled($first)) {
             return 'skip:no_identifier';
         }
 

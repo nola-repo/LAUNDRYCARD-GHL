@@ -155,4 +155,133 @@ class OAuthLifecycleTest extends TestCase
             $this->assertSame(1, \App\Models\BranchMapping::where('status', 'verified')->count());
         }
     }
+
+    public function test_proactive_refresh_command_rotates_tokens_within_two_hour_window(): void
+    {
+        // Token expires in 45 minutes (> 5m per-request leeway, but inside the 2h proactive window)
+        $c = $this->connection('LOC_A', 'Laundry Room of Lodi', ['expires_at' => now()->addMinutes(45)]);
+        $valid = $this->connection('LOC_B', 'Healthy Location', ['expires_at' => now()->addHours(12)]);
+
+        $this->httpFake([
+            'services.leadconnectorhq.com/oauth/token' => Http::response([
+                'access_token' => 'PROACTIVE_AT_A',
+                'refresh_token' => 'PROACTIVE_RT_A',
+                'expires_in' => 86400,
+                'scope' => 'contacts.readonly contacts.write locations.readonly',
+            ]),
+        ]);
+
+        $this->artisan('ghl:refresh-tokens')->assertExitCode(0);
+
+        $c->refresh();
+        $valid->refresh();
+        $this->assertSame('PROACTIVE_AT_A', $c->access_token);
+        $this->assertSame('PROACTIVE_RT_A', $c->refresh_token);
+        $this->assertSame('valid', $c->tokenExpiryState());
+        $this->assertSame('ACCESS_LOC_B', $valid->access_token, 'Tokens outside proactive window must not be refreshed');
+        Http::assertSentCount(1);
+    }
+
+    public function test_proactive_refresh_force_flag_rotates_even_non_expiring_tokens(): void
+    {
+        $c = $this->connection('LOC_A', 'Laundry Room of Lodi', ['expires_at' => now()->addHours(12)]);
+
+        $this->httpFake([
+            'services.leadconnectorhq.com/oauth/token' => Http::response([
+                'access_token' => 'FORCED_AT_A',
+                'refresh_token' => 'FORCED_RT_A',
+                'expires_in' => 86400,
+                'scope' => 'contacts.readonly contacts.write locations.readonly',
+            ]),
+        ]);
+
+        $this->artisan('ghl:refresh-tokens', ['--force' => true])->assertExitCode(0);
+
+        $c->refresh();
+        $this->assertSame('FORCED_AT_A', $c->access_token);
+        $this->assertSame('FORCED_RT_A', $c->refresh_token);
+    }
+
+    public function test_reactive_refresh_on_401_forces_rotation_and_retries_request(): void
+    {
+        // Connection appears valid locally (expires in 6 hours), but GHL rejects old token with 401
+        $c = $this->connection('LOC_A', 'Laundry Room of Lodi', ['expires_at' => now()->addHours(6)]);
+        $locationCalls = 0;
+
+        $this->httpFake([
+            'https://services.leadconnectorhq.com/*' => function (\Illuminate\Http\Client\Request $r) use (&$locationCalls) {
+                $path = parse_url($r->url(), PHP_URL_PATH);
+                if (str_contains($path, '/oauth/token')) {
+                    return Http::response([
+                        'access_token' => 'REACTIVE_NEW_AT',
+                        'refresh_token' => 'REACTIVE_NEW_RT',
+                        'expires_in' => 86400,
+                        'scope' => 'contacts.readonly contacts.write locations.readonly',
+                    ]);
+                }
+                if (str_contains($path, '/locations/')) {
+                    $locationCalls++;
+                    if (($r->header('Authorization')[0] ?? '') === 'Bearer ACCESS_LOC_A') {
+                        return Http::response(['message' => 'Invalid JWT'], 401);
+                    }
+
+                    return Http::response(['location' => ['id' => 'LOC_A', 'name' => 'Laundry Room of Lodi']]);
+                }
+
+                return Http::response([], 404);
+            },
+        ]);
+
+        $res = app(\App\Services\HighLevelClient::class)->testConnection($c);
+
+        $this->assertTrue($res['ok']);
+        $this->assertSame(2, $locationCalls);
+        $c->refresh();
+        $this->assertSame('REACTIVE_NEW_AT', $c->access_token);
+        $this->assertSame('REACTIVE_NEW_RT', $c->refresh_token);
+    }
+
+    public function test_concurrent_refresh_lock_prevents_duplicate_refresh_requests(): void
+    {
+        $c = $this->connection('LOC_A', 'Laundry Room of Lodi', ['expires_at' => now()->subMinute()]);
+        $this->httpFake();
+
+        // Simulate another worker having already rotated the token in DB before this worker acquires the lock
+        \Illuminate\Support\Facades\Cache::put('ghl_refresh:'.$c->id, 'held', 30);
+        $alreadyRotated = \App\Models\GhlConnection::findOrFail($c->id);
+        $alreadyRotated->update([
+            'access_token' => 'ALREADY_ROTATED_AT',
+            'refresh_token' => 'ALREADY_ROTATED_RT',
+            'expires_at' => now()->addHours(24),
+        ]);
+        \Illuminate\Support\Facades\Cache::forget('ghl_refresh:'.$c->id);
+
+        $fresh = app(HighLevelOAuthService::class)->refresh($c);
+
+        $this->assertSame('ALREADY_ROTATED_AT', $fresh->access_token);
+        $this->assertSame('ALREADY_ROTATED_RT', $fresh->refresh_token);
+        Http::assertNothingSent();
+    }
+
+    public function test_missing_scopes_log_warning_and_never_leak_tokens(): void
+    {
+        $c = $this->connection('LOC_A', 'Laundry Room of Lodi', ['expires_at' => now()->subMinute()]);
+        $this->httpFake([
+            'services.leadconnectorhq.com/oauth/token' => Http::response([
+                'access_token' => 'SECRET_AT_999',
+                'refresh_token' => 'SECRET_RT_999',
+                'expires_in' => 3600,
+                'scope' => 'locations.readonly',
+            ]),
+        ]);
+
+        $fresh = app(HighLevelOAuthService::class)->ensureFresh($c);
+
+        $this->assertSame(['locations.readonly'], $fresh->scopes);
+        $this->assertTrue(IntegrationEvent::where('stage', 'oauth.scopes')->where('outcome', 'missing_scopes')->exists());
+
+        $dump = json_encode(IntegrationEvent::all()->toArray());
+        $this->assertStringNotContainsString('SECRET_AT_999', $dump);
+        $this->assertStringNotContainsString('SECRET_RT_999', $dump);
+    }
 }

@@ -114,23 +114,23 @@
       <tbody>
         @forelse($connections as $c)
         <tr>
-          <td><span class="card-mono">{{ $c->location_id }}</span></td>
-          <td style="font-weight:700;color:var(--text-title)">{{ $c->location_name ?? '—' }}</td>
-          <td><x-badge :value="$c->status"/></td>
-          <td style="max-width:240px">
+          <td class="nowrap"><span class="card-mono">{{ $c->location_id }}</span></td>
+          <td style="font-weight:700;color:var(--text-title);min-width:170px">{{ $c->location_name ?? '—' }}</td>
+          <td class="nowrap"><x-badge :value="$c->status"/></td>
+          <td style="min-width:210px">
             <div class="tag-row" style="margin-top:0">
               @foreach($c->scopes ?? [] as $scope)
                 <span class="tag-chip">{{ $scope }}</span>
               @endforeach
             </div>
           </td>
-          <td>
+          <td class="nowrap">
             <x-badge :value="$c->tokenExpiryState()"/>
             <div class="muted" style="font-size:11px;margin-top:3px">{{ $c->expires_at?->diffForHumans() }}</div>
           </td>
-          <td class="muted">{{ $c->installed_at?->toDateString() ?? '—' }}</td>
-          <td>{{ $c->last_success_at?->diffForHumans() ?? 'never' }}</td>
-          <td style="max-width:260px">
+          <td class="muted nowrap">{{ $c->installed_at?->toDateString() ?? '—' }}</td>
+          <td class="nowrap">{{ $c->last_success_at?->diffForHumans() ?? 'never' }}</td>
+          <td style="max-width:220px">
             @if($c->last_error)
               <div class="err-txt" style="margin:0">{{ $c->last_error }}</div>
             @endif
@@ -141,7 +141,7 @@
               <span class="muted" style="font-size:12px">None</span>
             @endif
           </td>
-          <td>
+          <td class="nowrap">
             @if($c->activeMapping)
               <span class="store-id-pill">Store {{ $c->activeMapping->store->store_id }}</span>
               <div class="muted" style="font-size:11.5px;margin-top:3px">{{ $c->activeMapping->store->name }}</div>
