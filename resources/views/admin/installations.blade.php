@@ -116,7 +116,14 @@
         <tr>
           <td class="nowrap"><span class="card-mono">{{ $c->location_id }}</span></td>
           <td style="font-weight:700;color:var(--text-title);min-width:170px">{{ $c->location_name ?? '—' }}</td>
-          <td class="nowrap"><x-badge :value="$c->status"/></td>
+          <td class="nowrap">
+            <x-badge :value="$c->status"/>
+            @if($c->status === 'revoked' || $c->tokenExpiryState() === 'expired')
+              <div style="margin-top:6px">
+                <a href="{{ route('admin.connect') }}" class="btn sm primary" style="padding:4px 10px;font-size:11px">Reconnect OAuth</a>
+              </div>
+            @endif
+          </td>
           <td style="min-width:210px">
             <div class="tag-row" style="margin-top:0">
               @foreach($c->scopes ?? [] as $scope)

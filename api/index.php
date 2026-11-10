@@ -39,5 +39,14 @@ $_SERVER['APP_SERVICES_CACHE'] = "{$storagePath}/bootstrap/cache/services.php";
 // Normalize script name so Symfony/Laravel doesn't treat /api as application base URL
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 
+// Ensure live Contact Sync Engine & Transaction Ingestion are active on Vercel serverless runtime
+putenv("INTEGRATION_CONTACT_SYNC_ENABLED=true");
+$_ENV['INTEGRATION_CONTACT_SYNC_ENABLED'] = 'true';
+$_SERVER['INTEGRATION_CONTACT_SYNC_ENABLED'] = 'true';
+
+putenv("INTEGRATION_TRANSACTION_INGESTION_ENABLED=true");
+$_ENV['INTEGRATION_TRANSACTION_INGESTION_ENABLED'] = 'true';
+$_SERVER['INTEGRATION_TRANSACTION_INGESTION_ENABLED'] = 'true';
+
 // 3. Delegate to Laravel public entrypoint
 require __DIR__ . '/../public/index.php';

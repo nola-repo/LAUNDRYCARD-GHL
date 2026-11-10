@@ -203,8 +203,13 @@
           </div>
         </div>
 
-        <div class="health-card-status-badge ok">
-          <span class="dot ok"></span> {{ $stats['locations_active'] }} of {{ $stats['locations'] }} Locations Active
+        @php
+          $oauthOk = $stats['locations'] > 0 && $stats['locations_active'] === $stats['locations'];
+          $oauthPartial = $stats['locations_active'] > 0 && $stats['locations_active'] < $stats['locations'];
+          $oauthBadgeClass = $oauthOk ? 'ok' : ($oauthPartial ? 'warn' : 'bad');
+        @endphp
+        <div class="health-card-status-badge {{ $oauthBadgeClass }}">
+          <span class="dot {{ $oauthBadgeClass }}"></span> {{ $stats['locations_active'] }} of {{ $stats['locations'] }} Locations Active
         </div>
 
         <div class="health-card-meta-list">
@@ -800,9 +805,9 @@
           <div class="branch-card-footer">
             <div>
               <span class="muted">Scanned Records</span>
-              @if($st->live_enabled === false || $st->last_scan_status === 'failed')
+              @if($st->last_scan_status === 'failed')
                 <div style="font-size:10.5px; color:var(--warn-light); font-weight:700; margin-top:2px" title="{{ $st->last_scan_error ?? 'Store VPN offline at CCI Live' }}">
-                  ● Store VPN Offline (LiveEnabled=false)
+                  ● Store VPN Offline (HTTP 500)
                 </div>
               @endif
             </div>

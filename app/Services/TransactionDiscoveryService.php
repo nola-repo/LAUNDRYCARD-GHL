@@ -110,10 +110,13 @@ class TransactionDiscoveryService
         $reloadedQueued = 0;
 
         foreach ($stores as $store) {
-            if ($store->live_enabled === false && ! $onlyStoreId) {
+            $isOfflineStore = ($store->live_enabled === false && $store->baseline_completed_at === null)
+                || ($store->last_scan_status === 'failed' && str_contains((string) $store->last_scan_error, 'InvalidOperationException'));
+
+            if ($isOfflineStore && ! $onlyStoreId) {
                 $storeResults[$store->store_id] = [
                     'skipped' => 'store_live_disabled',
-                    'message' => 'Store LiveEnabled=false; on-premise X-Changer VPN is offline at CCI Live.',
+                    'message' => 'Store on-premise X-Changer VPN is offline at CCI Live.',
                 ];
 
                 continue;

@@ -81,22 +81,21 @@ class CustomerDiscoveryService
                 ->when($onlyStoreId, fn ($q) => $q->where('store_id', Normalizer::storeId($onlyStoreId)))->orderBy('store_id')->get();
 
             foreach ($stores as $store) {
-                if ($store->live_enabled === false && $store->baseline_completed_at !== null && ! $onlyStoreId) {
+                $isOfflineOnCooldown = ! $onlyStoreId
+                    && $store->last_scan_status === 'failed'
+                    && str_contains((string) $store->last_scan_error, 'InvalidOperationException')
+                    && $store->last_scan_at
+                    && $store->last_scan_at->gt(now()->subMinutes(60));
+
+                if ($isOfflineOnCooldown) {
                     $stats['stores'][$store->store_id] = [
-                        'skipped' => 'store_live_disabled',
-                        'message' => 'Store LiveEnabled=false; on-premise X-Changer VPN is offline at CCI Live.',
+                        'skipped' => 'store_offline_cooldown',
+                        'message' => 'Store on-premise X-Changer VPN is offline at CCI Live (60m probe cooldown).',
                     ];
-                    if (! $readOnly) {
-                        $store->update([
-                            'last_scan_at'     => now(),
-                            'last_scan_status' => 'skipped_offline',
-                            'last_scan_error'  => 'Store LiveEnabled=false; on-premise X-Changer VPN is offline at CCI Live.',
-                        ]);
-                    }
                     $this->logger->log('discovery.store', [
                         'store_id' => $store->store_id,
                         'outcome'  => 'skipped',
-                        'message'  => 'Skipped card poll because store LiveEnabled=false (on-premise X-Changer VPN offline).',
+                        'message'  => 'Skipped card poll on 60m cooldown because store on-premise X-Changer VPN returned HTTP 500.',
                     ]);
 
                     continue;
