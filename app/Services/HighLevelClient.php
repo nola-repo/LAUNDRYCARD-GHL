@@ -85,6 +85,86 @@ class HighLevelClient
         return is_array($contact) ? $contact : null;
     }
 
+    /**
+     * Update custom fields on a contact.
+     * Custom field IDs are per-location UUIDs configured in
+     * config integration.classification.custom_fields.{locationId}.
+     *
+     * Payload format: [['id' => 'UUID', 'field_value' => mixed], ...]
+     * Returns the updated contact array.
+     * Returns the existing contact unchanged if $fields is empty.
+     *
+     * @param  array<array{id:string,field_value:mixed}>  $fields
+     */
+    public function updateCustomFields(GhlConnection $connection, string $contactId, array $fields): array
+    {
+        if (empty($fields)) {
+            return ['id' => $contactId];
+        }
+
+        if (! $connection->hasScope('contacts.write')) {
+            $this->logger->log('ghl.contact.customfields', [
+                'outcome'         => 'skipped',
+                'level'           => 'warning',
+                'ghl_location_id' => $connection->location_id,
+                'message'         => 'contacts.write scope not granted; custom field update skipped.',
+            ]);
+
+            return ['id' => $contactId];
+        }
+
+        $payload = ['customFields' => $fields];
+        $response = $this->send(
+            $connection,
+            'PUT',
+            '/contacts/'.rawurlencode($contactId),
+            ['json' => $payload],
+            'ghl.contact.customfields',
+            '/contacts/{id}',
+        );
+
+        $contact = $response->json('contact');
+
+        return is_array($contact) ? $contact : ['id' => $contactId];
+    }
+
+    /**
+     * Retrieve configured custom fields for a location.
+     * Returns the raw GHL response — field IDs are UUID strings.
+     * Used for validation / admin diagnostics only.
+     */
+    public function getCustomFields(GhlConnection $connection): array
+    {
+        try {
+            $response = $this->send(
+                $connection,
+                'GET',
+                '/locations/'.rawurlencode($connection->location_id).'/customFields',
+                [],
+                'ghl.location.customfields',
+                '/locations/{id}/customFields',
+                allow404: true,
+            );
+        } catch (IntegrationException $e) {
+            $this->logger->log('ghl.location.customfields', [
+                'outcome'         => 'scope_missing_or_failed',
+                'level'           => 'warning',
+                'ghl_location_id' => $connection->location_id,
+                'message'         => 'Failed to fetch custom fields: '.$e->getMessage(),
+            ]);
+
+            return [];
+        }
+
+        if ($response->status() === 404 || ! $response->successful()) {
+            return [];
+        }
+
+        $fields = $response->json('customFields') ?? $response->json('fields') ?? [];
+
+        return is_array($fields) ? $fields : [];
+    }
+
     // ------------------------------------------------------------------ internals
 
     /** @param array{query?:array,json?:array} $opts */
@@ -109,6 +189,10 @@ class HighLevelClient
             $this->diag($connection, $method, $logPath, $response->status(), $started);
 
             $s = $response->status();
+            if ($s === 401 && str_contains(strtolower((string) ($response->json('message') ?? '')), 'scope')) {
+                $this->recordError($connection, 'forbidden (token not authorized for scope)');
+                throw new AuthorizationException('GHL denied the request (401): token is not authorized for this scope.', 401, $stage);
+            }
             if ($s === 401 && $attempt === 0) {
                 // Token might have been invalidated early: force a refresh and retry once.
                 $connection->update(['expires_at' => now()->subSecond()]);

@@ -13,15 +13,21 @@ class LaundrycardStore extends Model
     protected function casts(): array
     {
         return [
-            'live_enabled' => 'boolean',
-            'first_seen_at' => 'datetime',
-            'last_seen_at' => 'datetime',
-            'baseline_completed_at' => 'datetime',
-            'baseline_started_at' => 'datetime',
-            'last_scan_at' => 'datetime',
-            'last_successful_scan_at' => 'datetime',
-            'last_sync_cursor_at' => 'datetime',
+            'live_enabled'                => 'boolean',
+            'first_seen_at'               => 'datetime',
+            'last_seen_at'                => 'datetime',
+            'baseline_completed_at'       => 'datetime',
+            'baseline_started_at'         => 'datetime',
+            'last_scan_at'                => 'datetime',
+            'last_successful_scan_at'     => 'datetime',
+            'last_sync_cursor_at'         => 'datetime',
+            'last_transaction_cursor_at'  => 'datetime',
         ];
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(LaundrycardTransaction::class);
     }
 
     public function mappings(): HasMany

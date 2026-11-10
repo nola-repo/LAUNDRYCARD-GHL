@@ -120,14 +120,65 @@ class LaundryCardClient
         return $cards;
     }
 
-    /** Documented POS Account (GET only). Needs LAUNDRYCARD_POS_MACH_NO. Returns null when unavailable. */
+    /**
+     * Resolve the POS machine number for a given store.
+     * Per-store env vars (LAUNDRYCARD_POS_MACH_NO_<STOREID>) take priority over the
+     * global LAUNDRYCARD_POS_MACH_NO fallback. Returns null when neither is set.
+     */
+    public function machNoForStore(string|int $storeId): ?string
+    {
+        $padded = Normalizer::storeId($storeId);
+        $perStore = config('integration.laundrycard.pos_mach_nos', []);
+        if (filled($perStore[$padded] ?? null)) {
+            return (string) $perStore[$padded];
+        }
+        $global = config('integration.laundrycard.pos_mach_no');
+
+        return filled($global) ? (string) $global : null;
+    }
+
+    /**
+     * Whether any store has a configured machine number.
+     * Used by the diagnostics endpoint.
+     */
+    public function hasMachNo(string|int $storeId): bool
+    {
+        return $this->machNoForStore($storeId) !== null;
+    }
+
+    /**
+     * Configuration diagnostics — identifies missing values without exposing secrets.
+     *
+     * @return array{configured:bool,username_set:bool,password_set:bool,pos_mach_global:bool,pos_mach_per_store:array<string,bool>}
+     */
+    public function configDiagnostics(): array
+    {
+        $perStore = config('integration.laundrycard.pos_mach_nos', []);
+        $storeStatus = [];
+        foreach (['0160', '0679', '0705', '1153', '1179'] as $id) {
+            $storeStatus[$id] = filled($perStore[$id] ?? null) ? 'set' : (filled(config('integration.laundrycard.pos_mach_no')) ? 'global-fallback' : 'missing');
+        }
+
+        return [
+            'configured'           => $this->isConfigured(),
+            'username_set'         => filled(config('integration.laundrycard.username')),
+            'password_set'         => filled(config('integration.laundrycard.password')),
+            'pos_mach_global'      => filled(config('integration.laundrycard.pos_mach_no')),
+            'pos_mach_per_store'   => $storeStatus,
+            'enrichment_enabled'   => (bool) config('integration.discovery.enrich_with_account_detail'),
+            'transaction_ingestion' => (bool) config('integration.transactions.enabled'),
+            'sync_enabled'         => (bool) config('integration.sync.enabled'),
+        ];
+    }
+
+    /** Documented POS Account (GET only). Uses per-store or global MachNo. Returns null when unavailable. */
     public function account(string|int $storeId, string $cardNumber): ?array
     {
-        $mach = config('integration.laundrycard.pos_mach_no');
-        if (! filled($mach)) {
+        $mach = $this->machNoForStore($storeId);
+        if ($mach === null) {
             return null;
         }
-        $path = '/api/pos/'.(int) $storeId.'/'.rawurlencode((string) $mach).'/Account/'.rawurlencode($cardNumber);
+        $path = '/api/pos/'.(int) $storeId.'/'.rawurlencode($mach).'/Account/'.rawurlencode($cardNumber);
         $json = $this->get($path, [], 'laundrycard.account', ['store_id' => Normalizer::storeId($storeId)], allow404: true);
         if ($json === null) {
             return null;

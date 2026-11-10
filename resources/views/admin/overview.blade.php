@@ -10,15 +10,15 @@
   <header class="dashboard-hero reveal-on-scroll is-revealed" id="sec-hero">
     <div class="dashboard-hero-top">
       <div>
+        <span class="page-kicker">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>
+          Live Command Center
+        </span>
         <div class="dashboard-hero-heading">
           <h1>Integration Overview</h1>
-          <span class="hero-pill-badge">
-            <span class="hero-pill-dot"></span>
-            Production Console v2.4
-          </span>
         </div>
         <p class="dashboard-hero-desc">
-          Automated customer synchronization engine between CCI LaundryCard store balances and GoHighLevel CRM locations.
+          One-way sync of LaundryCard store balances into GoHighLevel locations.
         </p>
       </div>
 
@@ -110,7 +110,7 @@
       <div class="health-card">
         <div class="health-card-header">
           <div class="health-card-title-group">
-            <div class="health-card-kicker">Core System 1</div>
+            <div class="health-card-kicker">Source</div>
             <h3 class="health-card-title">LaundryCard API</h3>
           </div>
           <div class="health-card-icon health-card-icon--violet">
@@ -188,7 +188,7 @@
       <div class="health-card">
         <div class="health-card-header">
           <div class="health-card-title-group">
-            <div class="health-card-kicker">Core System 2</div>
+            <div class="health-card-kicker">Destination</div>
             <h3 class="health-card-title">GoHighLevel OAuth</h3>
           </div>
           <div class="health-card-icon health-card-icon--cyan">
@@ -223,7 +223,7 @@
       <div class="health-card">
         <div class="health-card-header">
           <div class="health-card-title-group">
-            <div class="health-card-kicker">Discovery Scanner</div>
+            <div class="health-card-kicker">Polling</div>
             <h3 class="health-card-title">Discovery Schedule</h3>
           </div>
           <div class="health-card-icon health-card-icon--emerald">
@@ -316,7 +316,7 @@
       <div class="health-card health-card--highlight">
         <div class="health-card-header">
           <div class="health-card-title-group">
-            <div class="health-card-kicker">Sync Pipeline</div>
+            <div class="health-card-kicker">Writes</div>
             <h3 class="health-card-title">Contact Sync Engine</h3>
           </div>
           <div class="health-card-icon {{ $syncEnabled ? 'health-card-icon--emerald' : 'health-card-icon--amber' }}">
@@ -699,7 +699,7 @@
           <span class="badge b-info">Live Queue</span>
         </div>
 
-        <div style="overflow-x:auto">
+        <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -712,10 +712,10 @@
             <tbody>
               @forelse($recentRuns as $run)
                 <tr>
-                  <td>
+                  <td style="font-weight:600;color:var(--text-title)">
                     <span title="{{ $run->started_at?->toDateTimeString() }}">{{ $run->started_at?->diffForHumans() ?? '—' }}</span>
                   </td>
-                  <td><span class="mono">{{ $run->type }}</span></td>
+                  <td><span class="card-mono">{{ $run->type }}</span></td>
                   <td><x-badge :value="$run->mode" /></td>
                   <td><x-badge :value="$run->status" /></td>
                 </tr>

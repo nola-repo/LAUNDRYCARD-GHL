@@ -10,16 +10,20 @@
     <span id="records-live-text">Connecting to live feed…</span>
     <span id="records-new-badge" class="records-new-badge" style="display:none"></span>
     <button id="records-refresh-btn" class="records-refresh-btn" style="display:none" onclick="window.location.reload()">
-      ↻ Load New Records
+      Load New Records
     </button>
     <span class="records-live-bar__right muted" id="records-live-count"></span>
   </div>
   <div class="records-live-bar__progress" id="records-live-progress"></div>
 </div>
 
-<div class="records-header">
+<div class="page-head">
   <div>
-    <h1>
+    <span class="page-kicker">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+      Customer Directory
+    </span>
+    <h1 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       Incoming Customer Records
       <span class="live-pill"><span class="dot ok"></span> Live Database</span>
     </h1>
@@ -30,52 +34,81 @@
 {{-- Top Metrics Overview --}}
 <div class="metric-row">
   <div class="metric-box">
-    <div class="metric-lbl">📊 Total Records</div>
+    <div class="metric-box-top">
+      <span class="metric-lbl">Total Records</span>
+      <div class="metric-icon metric-icon--violet">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+      </div>
+    </div>
     <div class="metric-num" data-live-stat="records">{{ number_format($counts['all']) }}</div>
-    <div class="muted" style="font-size:11px">All discovered accounts</div>
+    <div class="metric-sub">All discovered accounts</div>
   </div>
-  <div class="metric-box" style="border-color: rgba(52,211,153,.3); background: rgba(52,211,153,.04);">
-    <div class="metric-lbl" style="color: var(--ok)">✨ New Active (90 Days)</div>
-    <div class="metric-num" style="color: var(--ok)" data-live-stat="new_customers">{{ number_format($counts['new']) }}</div>
-    <div class="muted" style="font-size:11px">Recent card activity</div>
-  </div>
+
   <div class="metric-box">
-    <div class="metric-lbl">👤 Named Accounts</div>
-    <div class="metric-num" style="color: var(--accent2)">{{ number_format($counts['named']) }}</div>
-    <div class="muted" style="font-size:11px">Customer name linked</div>
+    <div class="metric-box-top">
+      <span class="metric-lbl">New Active (90d)</span>
+      <div class="metric-icon metric-icon--emerald">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+      </div>
+    </div>
+    <div class="metric-num" style="color: var(--ok-light)" data-live-stat="new_customers">{{ number_format($counts['new']) }}</div>
+    <div class="metric-sub">Recent card activity</div>
   </div>
+
   <div class="metric-box">
-    <div class="metric-lbl">🔗 Synced to GHL</div>
-    <div class="metric-num" style="color: var(--info)">{{ number_format($counts['synced']) }}</div>
-    <div class="muted" style="font-size:11px">Contacts in GoHighLevel</div>
+    <div class="metric-box-top">
+      <span class="metric-lbl">Named Accounts</span>
+      <div class="metric-icon metric-icon--cyan">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      </div>
+    </div>
+    <div class="metric-num" style="color: var(--accent-cyan)">{{ number_format($counts['named']) }}</div>
+    <div class="metric-sub">Customer identity linked</div>
   </div>
+
   <div class="metric-box">
-    <div class="metric-lbl">⚠️ On Hold / Attention</div>
-    <div class="metric-num" style="color: var(--warn)">{{ number_format($counts['held']) }}</div>
-    <div class="muted" style="font-size:11px">Held (\$0 balance or unmapped)</div>
+    <div class="metric-box-top">
+      <span class="metric-lbl">Synced to GHL</span>
+      <div class="metric-icon metric-icon--violet">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+      </div>
+    </div>
+    <div class="metric-num" style="color: var(--info-light)">{{ number_format($counts['synced']) }}</div>
+    <div class="metric-sub">Contacts in GoHighLevel</div>
+  </div>
+
+  <div class="metric-box">
+    <div class="metric-box-top">
+      <span class="metric-lbl">On Hold / Review</span>
+      <div class="metric-icon metric-icon--amber">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      </div>
+    </div>
+    <div class="metric-num" style="color: var(--warn-light)">{{ number_format($counts['held']) }}</div>
+    <div class="metric-sub">Held ($0 balance or unmapped)</div>
   </div>
 </div>
 
 {{-- Quick Filter Segment Tabs --}}
 <div class="filter-tabs">
   <a href="{{ route('admin.records') }}" class="filter-tab {{ empty($activeTab) && !request()->hasAny(['classification','status','has_name']) ? 'active' : '' }}">
-    <span>🌟 All Records</span>
+    <span>All Records</span>
     <span class="tab-badge">{{ number_format($counts['all']) }}</span>
   </a>
   <a href="{{ route('admin.records', array_merge(request()->except(['page','tab','classification']), ['tab' => 'new'])) }}" class="filter-tab {{ $activeTab === 'new' || request('classification') === \App\Models\LaundrycardSourceRecord::NEW_OBSERVED ? 'active' : '' }}">
-    <span>🟢 New Active Customers</span>
+    <span>New Active Customers</span>
     <span class="tab-badge">{{ number_format($counts['new']) }}</span>
   </a>
   <a href="{{ route('admin.records', array_merge(request()->except(['page','tab','has_name']), ['tab' => 'named'])) }}" class="filter-tab {{ $activeTab === 'named' || request('has_name') === 'yes' ? 'active' : '' }}">
-    <span>👤 With Customer Name</span>
+    <span>With Customer Name</span>
     <span class="tab-badge">{{ number_format($counts['named']) }}</span>
   </a>
   <a href="{{ route('admin.records', array_merge(request()->except(['page','tab','status']), ['tab' => 'synced'])) }}" class="filter-tab {{ $activeTab === 'synced' ? 'active' : '' }}">
-    <span>🔗 Synced to GHL</span>
+    <span>Synced to GHL</span>
     <span class="tab-badge">{{ number_format($counts['synced']) }}</span>
   </a>
   <a href="{{ route('admin.records', array_merge(request()->except(['page','tab','status']), ['tab' => 'held'])) }}" class="filter-tab {{ $activeTab === 'held' ? 'active' : '' }}">
-    <span>⚠️ On Hold / Attention</span>
+    <span>On Hold / Attention</span>
     <span class="tab-badge">{{ number_format($counts['held']) }}</span>
   </a>
 </div>
@@ -84,10 +117,10 @@
 <div class="filter-panel">
   <div class="filter-title">
     <h3>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-      Filter & Search Records
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+      Filter &amp; Search Records
     </h3>
-    <span class="muted" style="font-size:12px">Filters update results instantly upon applying</span>
+    <span class="muted" style="font-size:12px">Refine customer cards by branch, classification, or sync state</span>
   </div>
 
   <form method="get" action="{{ route('admin.records') }}">
@@ -99,7 +132,7 @@
       {{-- Card Search --}}
       <div class="filter-group">
         <label class="filter-label">
-          <span>🔍 Card Number</span>
+          <span>Card Number</span>
           <span class="filter-hint">Search #</span>
         </label>
         <input type="text" name="search" placeholder="e.g. 100234..." value="{{ request('search', request('q')) }}">
@@ -108,7 +141,7 @@
       {{-- Store Selection --}}
       <div class="filter-group">
         <label class="filter-label">
-          <span>🏪 Store Branch</span>
+          <span>Store Branch</span>
           <span class="filter-hint">Location</span>
         </label>
         <select name="store">
@@ -124,7 +157,7 @@
       {{-- Customer Classification --}}
       <div class="filter-group">
         <label class="filter-label">
-          <span>🏷️ Customer Type</span>
+          <span>Customer Type</span>
           <span class="filter-hint">Activity</span>
         </label>
         <select name="classification">
@@ -140,7 +173,7 @@
       {{-- Sync Status --}}
       <div class="filter-group">
         <label class="filter-label">
-          <span>🔄 Sync Status</span>
+          <span>Sync Status</span>
           <span class="filter-hint">GHL State</span>
         </label>
         <select name="status">
@@ -156,20 +189,20 @@
       {{-- Profile Info --}}
       <div class="filter-group">
         <label class="filter-label">
-          <span>👤 Contact Profile</span>
+          <span>Contact Profile</span>
           <span class="filter-hint">Identity</span>
         </label>
         <select name="has_name">
-          <option value="">All (Named & Anonymous)</option>
-          <option value="yes" @selected(request('has_name') === 'yes')>👤 Has Customer Name</option>
-          <option value="no" @selected(request('has_name') === 'no')>⚪ Anonymous Cards Only</option>
+          <option value="">All (Named &amp; Anonymous)</option>
+          <option value="yes" @selected(request('has_name') === 'yes')>Has Customer Name</option>
+          <option value="no" @selected(request('has_name') === 'no')>Anonymous Cards Only</option>
         </select>
       </div>
 
       {{-- Hold Reason --}}
       <div class="filter-group">
         <label class="filter-label">
-          <span>⚠️ Hold Reason</span>
+          <span>Hold Reason</span>
           <span class="filter-hint">Exclusions</span>
         </label>
         <select name="outcome">
@@ -185,8 +218,8 @@
       {{-- Date Range --}}
       <div class="filter-group">
         <label class="filter-label">
-          <span>📅 Observed Date</span>
-          <span class="filter-hint">From & To</span>
+          <span>Observed Date</span>
+          <span class="filter-hint">From &amp; To</span>
         </label>
         <div class="filter-dates">
           <input type="date" name="from" value="{{ request('from') }}" title="From Date">
@@ -197,7 +230,7 @@
       {{-- Page Size --}}
       <div class="filter-group">
         <label class="filter-label">
-          <span>📄 Items Per Page</span>
+          <span>Items Per Page</span>
           <span class="filter-hint">Pagination</span>
         </label>
         <select name="per_page">
@@ -212,8 +245,8 @@
     <div class="filter-bar-footer">
       <div class="filter-buttons">
         <button type="submit" class="btn primary">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:4px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Apply Filters
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Apply Filters</span>
         </button>
         <a class="btn" href="{{ route('admin.records') }}">Reset All</a>
       </div>
@@ -258,143 +291,182 @@
         <a href="{{ route('admin.records', request()->except([$key === 'date' ? 'from' : $key, 'to', 'page'])) }}" class="chip-remove" title="Remove filter">✕</a>
       </span>
     @endforeach
-    <a href="{{ route('admin.records') }}" class="btn sm" style="margin-left:6px; font-size:11px">Clear All</a>
+    <a href="{{ route('admin.records') }}" class="btn sm" style="margin-left:4px">Clear All</a>
   </div>
 @endif
 
 {{-- Customer Records Table --}}
-<div class="card" style="overflow:auto; padding:0; border-radius:12px">
-  <table class="records-table">
-    <thead>
-      <tr>
-        <th style="width:130px">Store</th>
-        <th style="width:130px">Card #</th>
-        <th>Customer Details</th>
-        <th style="width:100px">Balance</th>
-        <th style="width:140px">Customer Type</th>
-        <th style="width:140px">Eligibility</th>
-        <th style="width:170px">Sync Status</th>
-        <th style="width:150px">Last Activity</th>
-        <th style="width:130px">GHL Contact</th>
-      </tr>
-    </thead>
-    <tbody>
-      @forelse($records as $r)
-      <tr>
-        {{-- Store --}}
-        <td>
-          <div style="font-weight:600; font-size:12px">{{ $r->store->name ?? 'Store ' . $r->store->store_id }}</div>
-          <div class="muted mono" style="font-size:11px">#{{ $r->store->store_id }}</div>
-        </td>
+<div class="table-card">
+  <div class="table-scroll">
+    <table class="records-table">
+      <thead>
+        <tr>
+          <th style="width:140px">Store</th>
+          <th style="width:130px">Card #</th>
+          <th>Customer Details</th>
+          <th style="width:110px">Balance</th>
+          <th style="width:150px">Customer Type</th>
+          <th style="width:140px">Eligibility</th>
+          <th style="width:175px">Sync Status</th>
+          <th style="width:155px">Last Activity</th>
+          <th style="width:130px">GHL Contact</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse($records as $r)
+        <tr>
+          {{-- Store --}}
+          <td>
+            <div style="font-weight:700;font-size:12.5px;color:var(--text-title)">{{ $r->store->name ?? 'Store ' . $r->store->store_id }}</div>
+            <div class="muted mono" style="font-size:11px;margin-top:2px">#{{ $r->store->store_id }}</div>
+          </td>
 
-        {{-- Card # --}}
-        <td>
-          <span class="card-mono">{{ $r->card_number }}</span>
-        </td>
+          {{-- Card # --}}
+          <td>
+            <a class="card-mono" href="{{ route('admin.transactions', ['card' => $r->card_number, 'store' => $r->store->store_id ?? null]) }}" title="View credit history">
+              {{ $r->card_number }}
+            </a>
+          </td>
 
-        {{-- Customer Name & Details --}}
-        <td>
-          <div class="user-cell">
-            @if($r->customer_name)
-              <div class="user-name">
-                <span class="user-avatar">{{ strtoupper(substr(trim($r->customer_name), 0, 1)) }}</span>
-                <span>{{ ucwords(strtolower($r->customer_name)) }}</span>
-              </div>
-              <div class="user-meta">
-                @if($r->customer_email)
-                  <span>✉️ {{ $r->customer_email }}</span>
+          {{-- Customer Name & Details --}}
+          <td>
+            <div class="user-cell">
+              @php
+                $hasName = filled($r->customer_name);
+                $hasEmail = filled($r->customer_email);
+                $hasPhone = filled($r->customer_phone);
+                $hasMach = app(\App\Services\LaundryCardClient::class)->hasMachNo($r->store->store_id ?? '');
+                $previewTags = app(\App\Services\ContactClassificationService::class)->managedTags($r);
+              @endphp
+              @if($r->customer_name)
+                <div class="user-name">
+                  <span class="user-avatar">{{ strtoupper(substr(trim($r->customer_name), 0, 1)) }}</span>
+                  <span>{{ ucwords(strtolower($r->customer_name)) }}</span>
+                  <span class="badge b-ok" style="font-size:10px;margin-left:4px" title="Customer identified">Enriched</span>
+                </div>
+                <div class="user-meta">
+                  @if($r->customer_email)
+                    <span class="user-meta-item">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                      {{ $r->customer_email }}
+                    </span>
+                  @endif
+                  @if($r->customer_phone)
+                    <span class="user-meta-item">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                      {{ $r->customer_phone }}
+                    </span>
+                  @endif
+                </div>
+              @else
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span class="anon-badge">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Anonymous
+                  </span>
+                  @if($hasMach)
+                    <span class="badge b-info" style="font-size:10px" title="POS MachNo configured for this store">POS Ready</span>
+                  @else
+                    <span class="badge b-mute" style="font-size:10px" title="Awaiting store POS MachNo configuration">No MachNo</span>
+                  @endif
+                </div>
+              @endif
+
+              {{-- GHL Tag Preview --}}
+              <div class="tag-row">
+                @foreach(array_slice($previewTags, 0, 3) as $ptag)
+                  <span class="tag-chip">{{ $ptag }}</span>
+                @endforeach
+                @if(count($previewTags) > 3)
+                  <span class="tag-more" title="{{ implode(', ', $previewTags) }}">+{{ count($previewTags) - 3 }}</span>
                 @endif
-                @if($r->customer_phone)
-                  <span>📞 {{ $r->customer_phone }}</span>
-                @endif
               </div>
-            @else
-              <span class="anon-badge">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                Anonymous Cardholder
-              </span>
-            @endif
-          </div>
-        </td>
-
-        {{-- Balance --}}
-        <td>
-          @php $bal = (float) $r->balance; @endphp
-          @if($r->balance === null)
-            <span class="balance-pill bal-zero">Pending</span>
-          @elseif($bal > 0)
-            <span class="balance-pill bal-pos">${{ number_format($bal, 2) }}</span>
-          @elseif($bal == 0)
-            <span class="balance-pill bal-zero">$0.00</span>
-          @else
-            <span class="balance-pill bal-neg">-${{ number_format(abs($bal), 2) }}</span>
-          @endif
-        </td>
-
-        {{-- Classification --}}
-        <td>
-          @if($r->classification === 'new_observed')
-            <span class="badge b-ok" title="Customer had activity within last 90 days">✨ New Active (90d)</span>
-          @elseif($r->classification === 'confirmed_new')
-            <span class="badge b-info">⭐ Confirmed New</span>
-          @else
-            <span class="badge b-mute" title="Historical baseline cardholder">📁 Historical</span>
-          @endif
-        </td>
-
-        {{-- Eligibility --}}
-        <td>
-          <x-badge :value="$r->eligibility_status"/>
-          @if($r->eligibility_reason && $r->eligibility_reason !== $r->eligibility_status)
-            <div class="muted" style="font-size:11px; margin-top:2px">{{ ucwords(str_replace('_',' ',$r->eligibility_reason)) }}</div>
-          @endif
-        </td>
-
-        {{-- Routing / Sync --}}
-        <td>
-          <x-badge :value="$r->processing_status"/>
-          @if($r->hold_reason)
-            <div class="muted" style="font-size:11px; margin-top:3px; color: var(--warn)">
-              ⚠️ {{ $holdReasonLabels[$r->hold_reason] ?? ucwords(str_replace('_',' ',$r->hold_reason)) }}
             </div>
-          @endif
-          @if($r->destination_location_id)
-            <div class="muted mono" style="font-size:10px; margin-top:2px">Loc: {{ \Illuminate\Support\Str::limit($r->destination_location_id, 12) }}</div>
-          @endif
-        </td>
+          </td>
 
-        {{-- Activity Timestamp --}}
-        <td>
-          @if($r->source_timestamp)
-            <div style="font-size:12px">{{ $r->source_timestamp->format('M d, Y') }}</div>
-            <div class="muted" style="font-size:11px">{{ $r->source_timestamp->format('h:i A') }} ({{ $r->source_timestamp->diffForHumans() }})</div>
-          @else
-            <div style="font-size:12px">{{ $r->first_observed_at->format('M d, Y') }}</div>
-            <div class="muted" style="font-size:11px">Observed {{ $r->first_observed_at->diffForHumans() }}</div>
-          @endif
-        </td>
+          {{-- Balance --}}
+          <td>
+            @php $bal = (float) $r->balance; @endphp
+            @if($r->balance === null)
+              <span class="balance-pill bal-zero">Pending</span>
+            @elseif($bal > 0)
+              <span class="balance-pill bal-pos">${{ number_format($bal, 2) }}</span>
+            @elseif($bal == 0)
+              <span class="balance-pill bal-zero">$0.00</span>
+            @else
+              <span class="balance-pill bal-neg">-${{ number_format(abs($bal), 2) }}</span>
+            @endif
+          </td>
 
-        {{-- GHL Contact ID --}}
-        <td>
-          @if($r->contactMapping?->ghl_contact_id)
-            <span class="mono" style="font-size:11px; color: var(--accent2)">{{ \Illuminate\Support\Str::limit($r->contactMapping->ghl_contact_id, 14) }}</span>
-          @else
-            <span class="muted" style="font-size:12px">—</span>
-          @endif
-        </td>
-      </tr>
-      @empty
-      <tr>
-        <td colspan="9" style="text-align:center; padding:40px 20px">
-          <div style="font-size:24px; margin-bottom:8px">🔍</div>
-          <div style="font-weight:600; font-size:15px; margin-bottom:4px">No customer records match your filter</div>
-          <div class="muted" style="font-size:13px; margin-bottom:14px">Try adjusting or clearing your filters to see more results.</div>
-          <a class="btn primary" href="{{ route('admin.records') }}">Clear All Filters</a>
-        </td>
-      </tr>
-      @endforelse
-    </tbody>
-  </table>
+          {{-- Classification --}}
+          <td>
+            @if($r->classification === 'new_observed')
+              <span class="badge b-ok" title="Customer had activity within last 90 days">New Active (90d)</span>
+            @elseif($r->classification === 'confirmed_new')
+              <span class="badge b-info">Confirmed New</span>
+            @else
+              <span class="badge b-mute" title="Historical baseline cardholder">Historical</span>
+            @endif
+          </td>
+
+          {{-- Eligibility --}}
+          <td>
+            <x-badge :value="$r->eligibility_status"/>
+            @if($r->eligibility_reason && $r->eligibility_reason !== $r->eligibility_status)
+              <div class="muted" style="font-size:11px;margin-top:3px">{{ ucwords(str_replace('_',' ',$r->eligibility_reason)) }}</div>
+            @endif
+          </td>
+
+          {{-- Routing / Sync --}}
+          <td>
+            <x-badge :value="$r->processing_status"/>
+            @if($r->hold_reason)
+              <div class="muted" style="font-size:11px;margin-top:3px;color:var(--warn-light);font-weight:600">
+                {{ $holdReasonLabels[$r->hold_reason] ?? ucwords(str_replace('_',' ',$r->hold_reason)) }}
+              </div>
+            @endif
+            @if($r->destination_location_id)
+              <div class="muted mono" style="font-size:10px;margin-top:2px">Loc: {{ \Illuminate\Support\Str::limit($r->destination_location_id, 12) }}</div>
+            @endif
+          </td>
+
+          {{-- Activity Timestamp --}}
+          <td>
+            @if($r->source_timestamp)
+              <div style="font-size:12px;font-weight:600;color:var(--text-title)">{{ $r->source_timestamp->format('M d, Y') }}</div>
+              <div class="muted" style="font-size:11px">{{ $r->source_timestamp->format('h:i A') }} ({{ $r->source_timestamp->diffForHumans() }})</div>
+            @else
+              <div style="font-size:12px;font-weight:600;color:var(--text-title)">{{ $r->first_observed_at->format('M d, Y') }}</div>
+              <div class="muted" style="font-size:11px">Observed {{ $r->first_observed_at->diffForHumans() }}</div>
+            @endif
+          </td>
+
+          {{-- GHL Contact ID --}}
+          <td>
+            @if($r->contactMapping?->ghl_contact_id)
+              <span class="card-mono" style="font-size:11px">{{ \Illuminate\Support\Str::limit($r->contactMapping->ghl_contact_id, 14) }}</span>
+            @else
+              <span class="muted" style="font-size:12px">—</span>
+            @endif
+          </td>
+        </tr>
+        @empty
+        <tr>
+          <td colspan="9">
+            <div class="empty-state-box">
+              <div class="empty-state-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+              <div class="empty-state-text">No customer records match your filter</div>
+              <p class="muted" style="font-size:12.5px;margin:6px 0 16px">Try adjusting or clearing your filters to see more results.</p>
+              <a class="btn primary" href="{{ route('admin.records') }}">Clear All Filters</a>
+            </div>
+          </td>
+        </tr>
+        @endforelse
+      </tbody>
+    </table>
+  </div>
 </div>
 
 {{-- Pagination Footer with 15 Per Page --}}
@@ -437,14 +509,12 @@
   const apiUrl    = bar.dataset.url;
   const POLL_MS   = 6000;
 
-  // Track total record count on page load
   let knownTotal  = {{ $records->total() }};
   let lastEventId = 0;
   let newCount    = 0;
   let animFrame   = null;
   let pollStart   = null;
 
-  // Animate the progress bar (thin line sweep between polls)
   function animateProgress(startTs) {
     const elapsed = Date.now() - startTs;
     const pct     = Math.min(100, (elapsed / POLL_MS) * 100);
@@ -487,12 +557,7 @@
         setState('connected');
       }
 
-      // Update stat counts in metric boxes
       if (data.stats) {
-        const map = {
-          records:      null, // handled above as total
-        };
-        // Update the visible metric numbers if they have data-stat attributes
         for (const [key, value] of Object.entries(data.stats)) {
           const el = document.querySelector(`[data-live-stat="${key}"]`);
           if (el && value !== null && typeof value !== 'object') el.textContent = Number(value).toLocaleString();

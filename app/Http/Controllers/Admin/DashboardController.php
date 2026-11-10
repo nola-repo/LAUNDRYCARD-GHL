@@ -163,21 +163,21 @@ class DashboardController extends Controller
         ];
 
         $classificationLabels = [
-            Rec::NEW_OBSERVED => '✨ New Active Customers (Recent 90 Days)',
-            Rec::BASELINE => '📁 Historical Baseline (Old accounts)',
-            Rec::CONFIRMED_NEW => '⭐ Confirmed New Customers',
+            Rec::NEW_OBSERVED => 'New Active Customers (Recent 90 Days)',
+            Rec::BASELINE => 'Historical Baseline (Archived)',
+            Rec::CONFIRMED_NEW => 'Confirmed New Customers',
         ];
 
         $statusLabels = [
-            Rec::PENDING => '⏳ Ready to Sync (Pending)',
-            Rec::SYNCED_CREATED => '✅ Synced to GHL (New Contact)',
-            Rec::SYNCED_UPDATED => '🔄 Synced to GHL (Updated Contact)',
-            Rec::HELD => '⚠️ On Hold (Needs Attention / Excluded)',
-            Rec::FAILED => '❌ Sync Failed',
-            Rec::QUEUED => '📦 Queued for Sync',
-            Rec::PROCESSING => '⚙️ Processing Sync',
-            Rec::BASELINE_SKIPPED => '💤 Baseline (Historical Skipped)',
-            Rec::SKIPPED => '⏭️ Skipped',
+            Rec::PENDING => 'Ready to Sync (Pending)',
+            Rec::SYNCED_CREATED => 'Synced to GHL (New Contact)',
+            Rec::SYNCED_UPDATED => 'Synced to GHL (Updated Contact)',
+            Rec::HELD => 'On Hold (Needs Attention / Excluded)',
+            Rec::FAILED => 'Sync Failed',
+            Rec::QUEUED => 'Queued for Sync',
+            Rec::PROCESSING => 'Processing Sync',
+            Rec::BASELINE_SKIPPED => 'Baseline (Historical Skipped)',
+            Rec::SKIPPED => 'Skipped',
         ];
 
         $holdReasonLabels = [
@@ -198,6 +198,52 @@ class DashboardController extends Controller
             'classificationLabels' => $classificationLabels,
             'statusLabels' => $statusLabels,
             'holdReasonLabels' => $holdReasonLabels,
+        ]);
+    }
+
+    /** Credit history: reloads, bonuses and vends ingested from /api/transact. */
+    public function transactions(Request $request)
+    {
+        $q = \App\Models\LaundrycardTransaction::with(['store'])->latest('occurred_at')->latest('id');
+
+        $card = trim((string) $request->query('card'));
+        if ($card !== '') {
+            $q->where('card_number', 'like', "%{$card}%");
+        }
+        if ($s = $request->query('store')) {
+            $q->whereHas('store', fn ($x) => $x->where('store_id', $s));
+        }
+        if ($t = $request->query('type')) {
+            $t === 'unknown'
+                ? $q->where(fn ($x) => $x->where('transaction_type', 'unknown')->orWhereNull('transaction_type'))
+                : $q->where('transaction_type', $t);
+        }
+        if ($f = $request->query('from')) {
+            $q->whereDate('occurred_at', '>=', $f);
+        }
+        if ($to = $request->query('to')) {
+            $q->whereDate('occurred_at', '<=', $to);
+        }
+
+        // Summary for the (filtered) set.
+        $sumBase = clone $q;
+        $sumBase->getQuery()->orders = null;
+        $summary = [];
+        foreach ($sumBase->selectRaw('transaction_type, count(*) as n, sum(amount) as total')->groupBy('transaction_type')->get() as $row) {
+            $summary[$row->transaction_type ?? 'unknown'] = ['n' => (int) $row->n, 'total' => (float) $row->total];
+        }
+
+        $record = null;
+        if ($card !== '' && ($rq = Rec::with('store')->where('card_number', $card))->count() >= 1) {
+            $record = $rq->first();
+        }
+
+        return view('admin.transactions', [
+            'transactions' => $q->paginate(50)->withQueryString(),
+            'stores' => LaundrycardStore::orderBy('store_id')->get(),
+            'summary' => $summary,
+            'record' => $record,
+            'totalStored' => \App\Models\LaundrycardTransaction::count(),
         ]);
     }
 

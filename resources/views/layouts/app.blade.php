@@ -8,17 +8,11 @@
 <title>@yield('title', 'Integration Console') · LaundryCard ⇄ GHL</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ asset('css/admin.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ asset('css/admin.css') }}?v={{ @filemtime(public_path('css/admin.css')) }}">
 @stack('styles')
 </head>
-<body class="theme-dark">
-<div class="ambient-canvas">
-  <div class="ambient-orb ambient-orb--violet"></div>
-  <div class="ambient-orb ambient-orb--cyan"></div>
-  <div class="ambient-orb ambient-orb--indigo"></div>
-  <div class="ambient-grid"></div>
-</div>
+<body>
 
 <div class="mobile-topbar">
   <div class="brand">
@@ -122,6 +116,13 @@
           </svg>
         </span>
         <span class="nav-label">Customer Records</span>
+      </a>
+
+      <a id="nav-transactions" href="{{ route('admin.transactions') }}" class="nav-link {{ request()->routeIs('admin.transactions') ? 'on':'' }}" data-tooltip="Credit History">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+        </span>
+        <span class="nav-label">Credit History</span>
       </a>
 
       <a id="nav-logs" href="{{ route('admin.logs') }}" class="nav-link {{ request()->routeIs('admin.logs') ? 'on':'' }}" data-tooltip="Integration Logs">

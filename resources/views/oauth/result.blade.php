@@ -4,37 +4,57 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>GoHighLevel authorization · Integration Console</title>
-<link rel="stylesheet" href="{{ asset('css/admin.css') }}">
+<title>GoHighLevel Authorization · LaundryCard ⇄ GHL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ asset('css/admin.css') }}?v={{ @filemtime(public_path('css/admin.css')) }}">
 </head>
 <body>
 <div class="center">
-  <div class="card login">
-    <h1>{{ $ok ? 'Connected' : 'Authorization failed' }}</h1>
-    <p class="sub"><span class="dot {{ $ok ? 'ok' : 'bad' }}"></span>{{ $message }}</p>
+  <div class="card login" style="max-width:480px">
+    <div class="brand">
+      <i>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          <path d="m9 12 2 2 4-4"></path>
+        </svg>
+      </i>
+      <div class="brand-text">
+        <span class="brand-title">GoHighLevel OAuth</span>
+        <span class="brand-tag">Location Handshake</span>
+      </div>
+    </div>
+
+    <h1>{{ $ok ? 'Location Connected' : 'Authorization Failed' }}</h1>
+    <div class="health-card-status-badge {{ $ok ? 'ok' : 'bad' }}" style="margin-top:14px">
+      <span class="dot {{ $ok ? 'ok' : 'bad' }}"></span>
+      <span>{{ $message }}</span>
+    </div>
 
     @if(!$ok)
-    <p style="margin-top:1rem;font-size:13px;color:#6b7280;">
-      ℹ️ Check the <a href="{{ route('admin.logs') }}?stage=oauth" style="color:#2563eb">API Activity log</a>
-      for detailed error information, then try connecting again from the
-      <a href="{{ route('admin.installations') }}" style="color:#2563eb">Installations page</a>.
+    <p class="muted" style="font-size:13px;margin-top:12px">
+      Check the <a href="{{ route('admin.logs') }}?stage=oauth">OAuth activity log</a>
+      for details, then try again from the <a href="{{ route('admin.installations') }}">Installations page</a>.
     </p>
     @endif
 
     @if(!empty($debug))
-    <div style="margin-top:1rem;padding:12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;font-size:12px;font-family:monospace;text-align:left;">
-      <strong>Debug info (dev only)</strong><br>
-      Class: {{ $debug['exception_class'] }}<br>
-      Message: {{ $debug['exception_message'] }}<br>
-      @if($debug['stage']) Stage: {{ $debug['stage'] }} @endif
+    <div class="flash res" style="margin-top:16px">
+      <strong>Debug info (dev only)</strong>
+      <pre>Class: {{ $debug['exception_class'] }}
+Message: {{ $debug['exception_message'] }}@if($debug['stage'])
+Stage: {{ $debug['stage'] }}@endif</pre>
     </div>
     @endif
 
-    <p style="margin-top:1.5rem;font-size:12px;color:#9ca3af;">{{ $timestamp ?? now()->toDateTimeString() }}</p>
-
-    <div style="margin-top:1rem;">
-      <a href="{{ route('admin.installations') }}" style="display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
-        ← Back to Installations
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:24px;flex-wrap:wrap">
+      <span class="muted mono" style="font-size:11.5px">{{ $timestamp ?? now()->toDateTimeString() }}</span>
+      <a href="{{ route('admin.installations') }}" class="btn primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m15 18-6-6 6-6"></path>
+        </svg>
+        <span>Back to Installations</span>
       </a>
     </div>
   </div>

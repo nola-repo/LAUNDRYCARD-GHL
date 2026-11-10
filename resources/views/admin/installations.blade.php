@@ -3,45 +3,169 @@
 @section('content')
 
 @if(session('flash_success'))
-<div style="margin-bottom:1rem;padding:12px 16px;background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;color:#065f46;font-weight:500;">
-  ✅ {{ session('flash_success') }}
-</div>
+<div class="notice ok">{{ session('flash_success') }}</div>
 @endif
 
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:12px">
+<div class="page-head">
   <div>
-    <h1 style="margin:0">OAuth Installations</h1>
-    <p class="sub" style="margin:4px 0 0">Location-scoped GHL connections registered through OAuth. Tokens are encrypted and never displayed.</p>
+    <span class="page-kicker">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+      OAuth 2.0 Security
+    </span>
+    <h1>OAuth Installations</h1>
+    <p class="sub">Location-scoped GoHighLevel connections registered through OAuth. Access and refresh tokens are encrypted at rest and never displayed.</p>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <a href="{{ route('admin.connect') }}" class="btn" style="background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:6px">
-      <span>+</span> Connect GoHighLevel Location
+  <div class="btn-row">
+    <a href="{{ route('admin.connect') }}" class="btn primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>Connect location</span>
     </a>
-    <a href="{{ route('admin.oauth.diagnose') }}" style="background:#f3f4f6;color:#374151;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:6px;border:1px solid #d1d5db;">
-      🔍 OAuth Diagnostics
+    <a href="{{ route('admin.oauth.diagnose') }}" class="btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      <span>Diagnostics</span>
     </a>
-    <button onclick="copyAuthUrl()" style="background:#f3f4f6;color:#374151;padding:8px 16px;border-radius:6px;font-weight:600;border:1px solid #d1d5db;cursor:pointer;" title="Fetch and copy the authorization URL (state redacted) for inspection">
-      📋 Copy Auth URL
+    <button type="button" onclick="copyAuthUrl()" class="btn" title="Fetch and copy the authorization URL (state redacted) for inspection">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Copy auth URL</span>
     </button>
   </div>
 </div>
-<div class="card" style="overflow:auto">
-<table>
-  <tr><th>Location ID</th><th>Name</th><th>Status</th><th>Granted scopes</th><th>Token health</th><th>Installed</th><th>Last API success</th><th>Recent errors</th><th>Mapped store</th></tr>
-  @forelse($connections as $c)
-  <tr>
-    <td class="mono">{{ $c->location_id }}</td><td>{{ $c->location_name ?? '—' }}</td>
-    <td><x-badge :value="$c->status"/></td>
-    <td style="max-width:220px">@foreach($c->scopes ?? [] as $scope)<span class="badge b-mute" style="margin:1px">{{ $scope }}</span>@endforeach</td>
-    <td><x-badge :value="$c->tokenExpiryState()"/><div class="muted" style="font-size:11px">{{ $c->expires_at?->diffForHumans() }}</div></td>
-    <td>{{ $c->installed_at?->toDateString() }}</td><td>{{ $c->last_success_at?->diffForHumans() ?? 'never' }}</td>
-    <td style="max-width:260px">@if($c->last_error)<div class="err-txt" style="margin:0">{{ $c->last_error }}</div>@endif
-      @foreach($c->recent_errors as $e)<div class="muted" style="font-size:11px">{{ $e->created_at->diffForHumans() }}: {{ \Illuminate\Support\Str::limit($e->message,70) }}</div>@endforeach
-    </td>
-    <td>@if($c->activeMapping) {{ $c->activeMapping->store->store_id }} <span class="muted">{{ $c->activeMapping->store->name }}</span> @else <x-badge value="unmapped"/> @endif</td>
-  </tr>
-  @empty<tr><td colspan="9" class="muted">No GHL location has authorized the app yet.</td>@endforelse
-</table>
+
+@php
+  $totalConns = $connections->count();
+  $activeConns = $connections->where('status', 'active')->count();
+  $mappedConns = $connections->filter(fn($c) => $c->activeMapping !== null)->count();
+  $unmappedConns = $totalConns - $mappedConns;
+@endphp
+
+<div class="metric-row">
+  <div class="metric-box">
+    <div class="metric-box-top">
+      <span class="metric-lbl">Registered Locations</span>
+      <div class="metric-icon metric-icon--violet">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+      </div>
+    </div>
+    <div class="metric-num">{{ $totalConns }}</div>
+    <div class="metric-sub">Total OAuth handshakes stored</div>
+  </div>
+
+  <div class="metric-box">
+    <div class="metric-box-top">
+      <span class="metric-lbl">Active Sessions</span>
+      <div class="metric-icon metric-icon--emerald">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+      </div>
+    </div>
+    <div class="metric-num" style="color:var(--ok-light)">{{ $activeConns }}</div>
+    <div class="metric-sub">Auto-rotating token lifecycle</div>
+  </div>
+
+  <div class="metric-box">
+    <div class="metric-box-top">
+      <span class="metric-lbl">Routed to Store</span>
+      <div class="metric-icon metric-icon--cyan">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M18 6v6a6 6 0 0 1-6 6H6"></path></svg>
+      </div>
+    </div>
+    <div class="metric-num">{{ $mappedConns }}</div>
+    <div class="metric-sub">Linked to a LaundryCard branch</div>
+  </div>
+
+  <div class="metric-box">
+    <div class="metric-box-top">
+      <span class="metric-lbl">Unassigned</span>
+      <div class="metric-icon metric-icon--amber">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      </div>
+    </div>
+    <div class="metric-num">{{ $unmappedConns }}</div>
+    <div class="metric-sub">Awaiting store pair resolution</div>
+  </div>
+</div>
+
+<div class="table-card">
+  <div class="table-card-header">
+    <div>
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        Connected Sub-Accounts
+      </h2>
+      <span class="muted" style="font-size:12px">Encrypted OAuth credentials and token rotation telemetry per GoHighLevel location</span>
+    </div>
+    <span class="badge b-ok"><span class="dot ok"></span> AES-256 Encrypted</span>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Location ID</th>
+          <th>Sub-Account Name</th>
+          <th>Status</th>
+          <th>Granted Scopes</th>
+          <th>Token Health</th>
+          <th>Installed</th>
+          <th>Last API Success</th>
+          <th>Recent Errors</th>
+          <th>Mapped Store</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse($connections as $c)
+        <tr>
+          <td><span class="card-mono">{{ $c->location_id }}</span></td>
+          <td style="font-weight:700;color:var(--text-title)">{{ $c->location_name ?? '—' }}</td>
+          <td><x-badge :value="$c->status"/></td>
+          <td style="max-width:240px">
+            <div class="tag-row" style="margin-top:0">
+              @foreach($c->scopes ?? [] as $scope)
+                <span class="tag-chip">{{ $scope }}</span>
+              @endforeach
+            </div>
+          </td>
+          <td>
+            <x-badge :value="$c->tokenExpiryState()"/>
+            <div class="muted" style="font-size:11px;margin-top:3px">{{ $c->expires_at?->diffForHumans() }}</div>
+          </td>
+          <td class="muted">{{ $c->installed_at?->toDateString() ?? '—' }}</td>
+          <td>{{ $c->last_success_at?->diffForHumans() ?? 'never' }}</td>
+          <td style="max-width:260px">
+            @if($c->last_error)
+              <div class="err-txt" style="margin:0">{{ $c->last_error }}</div>
+            @endif
+            @foreach($c->recent_errors as $e)
+              <div class="muted" style="font-size:11px">{{ $e->created_at->diffForHumans() }}: {{ \Illuminate\Support\Str::limit($e->message,70) }}</div>
+            @endforeach
+            @if(!$c->last_error && (!isset($c->recent_errors) || count($c->recent_errors) === 0))
+              <span class="muted" style="font-size:12px">None</span>
+            @endif
+          </td>
+          <td>
+            @if($c->activeMapping)
+              <span class="store-id-pill">Store {{ $c->activeMapping->store->store_id }}</span>
+              <div class="muted" style="font-size:11.5px;margin-top:3px">{{ $c->activeMapping->store->name }}</div>
+            @else
+              <x-badge value="unmapped"/>
+            @endif
+          </td>
+        </tr>
+        @empty
+        <tr>
+          <td colspan="9">
+            <div class="empty-state-box">
+              <div class="empty-state-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              </div>
+              <div class="empty-state-text">No GHL location has authorized the app yet.</div>
+              <p class="muted" style="font-size:12.5px;margin-top:4px">Use the Connect location button above to initiate the OAuth handshake.</p>
+            </div>
+          </td>
+        </tr>
+        @endforelse
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <script>

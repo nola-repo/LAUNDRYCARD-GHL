@@ -249,7 +249,7 @@ class DiscoveryAndSyncTest extends TestCase
         $this->assertSame('PUT', $put->method());
         $this->assertArrayNotHasKey('firstName', $put->data(), 'Existing values are never overwritten.');
         $this->assertSame('Doe', $put['lastName']);
-        $this->assertEqualsCanonicalizing(['vip', 'laundrycard'], $put['tags']);
+        $this->assertEqualsCanonicalizing(['vip', 'laundrycard', 'store-0160', 'balance-positive'], $put['tags']);
         $this->assertCount(0, $this->ghlSent()->filter(fn ($p) => $p[0]->method() === 'POST'));
     }
 

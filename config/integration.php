@@ -13,10 +13,19 @@ return [
         'base_url' => env('LAUNDRYCARD_BASE_URL', 'https://live.laundrycard.com'),
         'username' => env('LAUNDRYCARD_USERNAME'),
         'password' => env('LAUNDRYCARD_PASSWORD'),
-        // POS "MachNo" is required by the documented Account endpoint and must
-        // match a defined POS equipment at the store. Without it only the
-        // email on the Cards endpoint is available.
+        // Global POS "MachNo" fallback. Per-store overrides take priority.
+        // Pattern: LAUNDRYCARD_POS_MACH_NO_<STORE_ID> e.g. LAUNDRYCARD_POS_MACH_NO_0160
+        // Without a machine number only the email on the Cards endpoint is available.
         'pos_mach_no' => env('LAUNDRYCARD_POS_MACH_NO'),
+        // Per-store machine numbers. Set via env LAUNDRYCARD_POS_MACH_NO_<STOREID>.
+        // These are resolved at runtime by LaundryCardClient::machNoForStore().
+        'pos_mach_nos' => array_filter([
+            '0160' => env('LAUNDRYCARD_POS_MACH_NO_0160'),
+            '0679' => env('LAUNDRYCARD_POS_MACH_NO_0679'),
+            '0705' => env('LAUNDRYCARD_POS_MACH_NO_0705'),
+            '1153' => env('LAUNDRYCARD_POS_MACH_NO_1153'),
+            '1179' => env('LAUNDRYCARD_POS_MACH_NO_1179'),
+        ]),
         // The docs do not state token lifetime; we re-authenticate on 401 and
         // proactively after this many seconds.
         'token_ttl' => (int) env('LAUNDRYCARD_TOKEN_TTL', 3000),
@@ -41,7 +50,7 @@ return [
         'token_url' => env('GHL_TOKEN_URL', 'https://services.leadconnectorhq.com/oauth/token'),
         'api_base' => env('GHL_API_BASE', 'https://services.leadconnectorhq.com'),
         'api_version' => env('GHL_API_VERSION', '2021-07-28'),
-        'scopes' => preg_split('/[\\s,]+/', trim((string) env('GHL_SCOPES', 'contacts.readonly contacts.write locations.readonly oauth.readonly')), -1, PREG_SPLIT_NO_EMPTY),
+        'scopes' => preg_split('/[\\s,]+/', trim((string) env('GHL_SCOPES', 'contacts.readonly contacts.write locations.readonly locations.customfields.readonly oauth.readonly')), -1, PREG_SPLIT_NO_EMPTY),
         'timeout' => (int) env('GHL_TIMEOUT', 20),
         'state_ttl_seconds' => 600,
         // Refresh when fewer than this many seconds remain.
@@ -68,6 +77,37 @@ return [
     ],
 
     'cron_secret' => env('INTEGRATION_CRON_KEY', env('CRON_SECRET')),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Transaction Ingestion
+    |--------------------------------------------------------------------------
+    | Incremental polling of /api/transact per store. Disabled by default
+    | until actual transaction field names and type codes are confirmed.
+    */
+    'transactions' => [
+        'enabled'              => (bool) env('INTEGRATION_TRANSACTION_INGESTION_ENABLED', false),
+        'window_hours'         => (int) env('INTEGRATION_TRANSACTION_WINDOW_HOURS', 1),
+        'max_lookback_hours'   => (int) env('INTEGRATION_TRANSACTION_MAX_LOOKBACK_HOURS', 48),
+        'overlap_minutes'      => (int) env('INTEGRATION_TRANSACTION_OVERLAP_MINUTES', 10),
+        'schedule_every_minutes' => (int) env('INTEGRATION_TRANSACTION_EVERY_MINUTES', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Contact Classification (Tags & Custom Fields)
+    |--------------------------------------------------------------------------
+    | Thresholds are configurable — do not embed business assumptions in code.
+    | GHL custom field UUIDs are per-location and must be set before use.
+    */
+    'classification' => [
+        // Balance tier thresholds (dollar amounts, inclusive lower bound)
+        'balance_low_max'  => (float) env('INTEGRATION_BALANCE_LOW_MAX', 10.00),
+        'balance_high_min' => (float) env('INTEGRATION_BALANCE_HIGH_MIN', 25.00),
+        // GHL custom field IDs — location-keyed JSON map.
+        // e.g. {"zO81pBadpY7BUJSTFCoK":{"card_number":"UUID","balance":"UUID","store_id":"UUID"}}
+        'custom_fields'    => json_decode((string) env('INTEGRATION_GHL_CUSTOM_FIELDS', '{}'), true) ?: [],
+    ],
 
     'sync' => [
         // Real contact writes remain off until credentials and routing have been verified.

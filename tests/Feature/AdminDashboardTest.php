@@ -37,7 +37,7 @@ class AdminDashboardTest extends TestCase
         $this->verifiedMapping('0160', 'LOC_A');
         $this->store('0679', 'Laundry Time');
         $a = $this->actingAs($this->admin());
-        foreach (['overview', 'installations', 'mappings', 'records', 'logs', 'failed', 'developer'] as $r) {
+        foreach (['overview', 'installations', 'mappings', 'records', 'transactions', 'logs', 'failed', 'developer', 'oauth.diagnose'] as $r) {
             $a->get(route("admin.$r"))->assertOk();
         }
 

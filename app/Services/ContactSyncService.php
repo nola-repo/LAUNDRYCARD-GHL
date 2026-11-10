@@ -14,6 +14,7 @@ use App\Support\Sanitizer;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Str;
 use Throwable;
+// ContactClassificationService resolved via app() to avoid circular constructor dependency.
 
 /**
  * LaundryCard record -> GHL contact (one-way). Idempotent, race-safe and
@@ -26,6 +27,7 @@ class ContactSyncService
         private CustomerMatchingService $matching,
         private HighLevelClient $ghl,
         private IntegrationLogger $logger,
+        private ContactClassificationService $classifier,
     ) {
     }
 
@@ -144,7 +146,7 @@ class ContactSyncService
                 [$action, $contactId] = $this->updateSafely($connection, $existing, $record, $email, $phone);
             } else {
                 $attempt->update(['stage' => 'create']);
-                $created = $this->ghl->createContact($connection, $this->payload($record, $email, $phone, $storeId));
+                $created = $this->ghl->createContact($connection, $this->payload($record, $email, $phone, $storeId, $connection->location_id));
                 [$action, $contactId] = ['created', $created['id']];
             }
 
@@ -190,14 +192,22 @@ class ContactSyncService
         }
     }
 
-    private function payload(Rec $record, ?string $email, ?string $phone, string $storeId): array
+    private function payload(Rec $record, ?string $email, ?string $phone, string $storeId, string $locationId = ''): array
     {
         [$first, $last] = Normalizer::splitName($record->customer_name);
 
+        // Use the classification engine for tags — always overrides the static config default.
+        $tags = $this->classifier->managedTags($record);
+        $customFields = $locationId !== '' ? $this->classifier->customFields($record, $locationId) : [];
+
         return array_filter([
-            'firstName' => $first, 'lastName' => $last, 'email' => $email, 'phone' => $phone,
-            'source' => config('integration.ghl.contact_source'),
-            'tags' => config('integration.ghl.contact_tags'),
+            'firstName'    => $first,
+            'lastName'     => $last,
+            'email'        => $email,
+            'phone'        => $phone,
+            'source'       => config('integration.ghl.contact_source'),
+            'tags'         => $tags ?: config('integration.ghl.contact_tags'),
+            'customFields' => $customFields ?: null,
         ], fn ($v) => $v !== null && $v !== []);
     }
 
@@ -205,17 +215,28 @@ class ContactSyncService
     private function updateSafely(GhlConnection $connection, array $existing, Rec $record, ?string $email, ?string $phone): array
     {
         $id = $existing['id'];
-        $desired = $this->payload($record, $email, $phone, '');
+        $desired = $this->payload($record, $email, $phone, '', $connection->location_id);
         $changes = [];
         foreach (['firstName', 'lastName', 'email', 'phone'] as $f) {
             if (isset($desired[$f]) && empty($existing[$f])) {
                 $changes[$f] = $desired[$f];
             }
         }
-        $tags = array_values(array_unique(array_merge((array) ($existing['tags'] ?? []), (array) ($desired['tags'] ?? []))));
-        if ($tags !== array_values((array) ($existing['tags'] ?? []))) {
-            $changes['tags'] = $tags; // PUT replaces tags, so send the union
+
+        // Tags: use classifier to build full merged set (preserves human-assigned tags).
+        $mergedTags = $this->classifier->tags($record, (array) ($existing['tags'] ?? []));
+        $existingTags = array_values((array) ($existing['tags'] ?? []));
+        sort($existingTags);
+        $sortedMerged = $mergedTags; // already sorted by classify()
+        if ($sortedMerged !== $existingTags) {
+            $changes['tags'] = $sortedMerged;
         }
+
+        // Custom fields: include integration-managed custom fields when configured for this location.
+        if (! empty($desired['customFields'])) {
+            $changes['customFields'] = $desired['customFields'];
+        }
+
         if (! $changes) {
             return ['linked', $id];
         }
