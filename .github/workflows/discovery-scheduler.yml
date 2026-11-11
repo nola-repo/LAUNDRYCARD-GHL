@@ -29,7 +29,7 @@ jobs:
       - name: Trigger Discovery Endpoint
         env:
           APP_URL: ${{ secrets.APP_URL || 'https://laundrycard-sync.vercel.app' }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET || 'lc_sec_8f9c1e74a2b6d0e82f41973b5c0e1847' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           echo "Triggering automated discovery on ${APP_URL} at $(date -u)..."
           HTTP_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME_TOTAL:%{time_total}" \

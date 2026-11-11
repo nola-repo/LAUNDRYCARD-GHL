@@ -20,7 +20,7 @@ jobs:
       - name: Process queued sync jobs
         env:
           APP_URL: ${{ secrets.APP_URL || 'https://laundrycard-sync.vercel.app' }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET || 'lc_sec_8f9c1e74a2b6d0e82f41973b5c0e1847' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           # Up to 4 back-to-back passes (~25s each) per run while a backlog remains.
           for i in 1 2 3 4; do
@@ -42,3 +42,4 @@ jobs:
               break
             fi
           done
+
