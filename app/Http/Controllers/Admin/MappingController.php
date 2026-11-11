@@ -44,6 +44,31 @@ class MappingController extends Controller
         }
     }
 
+    /** Manually trigger token refresh for a specific GHL connection. */
+    public function refreshConnection(GhlConnection $connection, HighLevelOAuthService $oauth)
+    {
+        try {
+            $fresh = $oauth->refresh($connection, force: true);
+            $expiry = $fresh->expires_at ? $fresh->expires_at->diffForHumans() : 'unknown';
+
+            return back()->with('flash_success', "✅ Token for '{$fresh->location_name}' refreshed successfully! Valid until {$fresh->expires_at?->format('M d, Y H:i:s')} UTC ({$expiry}).");
+        } catch (\Throwable $e) {
+            return back()->with('error', "Failed to refresh token for '{$connection->location_name}': ".$e->getMessage());
+        }
+    }
+
+    /** Manually trigger token refresh for all active GHL connections. */
+    public function refreshAllConnections(HighLevelOAuthService $oauth)
+    {
+        try {
+            $summary = $oauth->refreshExpiring(windowSeconds: 86400 * 30, force: true);
+
+            return back()->with('flash_success', "✅ Batch token rotation completed: {$summary['refreshed']} refreshed, {$summary['skipped']} skipped, {$summary['failed']} failed.");
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Batch token rotation failed: '.$e->getMessage());
+        }
+    }
+
     /**
      * Locally mark a connection as disconnected.
      * The branch mapping is preserved so reinstalling resumes it automatically.

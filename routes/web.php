@@ -168,7 +168,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::get('/', [DashboardController::class, 'overview'])->name('overview');
     Route::get('/installations', [DashboardController::class, 'installations'])->name('installations');
     Route::get('/mappings', [DashboardController::class, 'mappings'])->name('mappings');
+    Route::get('/records/export', [DashboardController::class, 'exportRecords'])->name('records.export');
     Route::get('/records', [DashboardController::class, 'records'])->name('records');
+    Route::get('/transactions/export', [DashboardController::class, 'exportTransactions'])->name('transactions.export');
     Route::get('/transactions', [DashboardController::class, 'transactions'])->name('transactions');
     Route::get('/logs', [DashboardController::class, 'logs'])->name('logs');
     Route::get('/failed', [DashboardController::class, 'failed'])->name('failed');
@@ -177,6 +179,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
 
     Route::get('/connect', [MappingController::class, 'connect'])->name('connect');
     Route::post('/connections/{connection}/test', [MappingController::class, 'testConnection'])->name('connections.test');
+    Route::post('/connections/{connection}/refresh', [MappingController::class, 'refreshConnection'])->name('connections.refresh');
+    Route::post('/connections/refresh-all', [MappingController::class, 'refreshAllConnections'])->name('connections.refresh-all');
     Route::post('/connections/{connection}/disconnect', [MappingController::class, 'disconnect'])->name('connections.disconnect');
     Route::post('/mappings/auto-map', [MappingController::class, 'runAutoMap'])->name('mappings.auto-map');
 

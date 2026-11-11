@@ -83,7 +83,13 @@ class DashboardController extends Controller
             return $c;
         });
 
-        return view('admin.installations', ['connections' => $connections]);
+        $recentOauthEvents = IntegrationEvent::where('stage', 'like', 'oauth.%')
+            ->latest('id')->limit(15)->get();
+
+        return view('admin.installations', [
+            'connections' => $connections,
+            'recentOauthEvents' => $recentOauthEvents,
+        ]);
     }
 
     public function mappings(BranchMappingService $svc)
@@ -105,52 +111,7 @@ class DashboardController extends Controller
     public function records(Request $request)
     {
         $tab = $request->query('tab');
-        $q = Rec::with(['store', 'connection', 'contactMapping'])
-            ->withCount(['transactions as reload_count' => fn ($tx) => $tx->where('transaction_type', 'reload')])
-            ->withSum(['transactions as reload_total' => fn ($tx) => $tx->where('transaction_type', 'reload')], 'amount')
-            ->latest('first_observed_at');
-
-        // Quick search by card number
-        if ($search = trim((string) $request->query('search', $request->query('q')))) {
-            $q->where('card_number', 'like', "%{$search}%");
-        }
-
-        // Quick Tab Presets
-        if ($tab === 'new') {
-            $q->where('classification', Rec::NEW_OBSERVED);
-        } elseif ($tab === 'named') {
-            $q->whereNotNull('customer_name');
-        } elseif ($tab === 'synced') {
-            $q->whereIn('processing_status', [Rec::SYNCED_CREATED, Rec::SYNCED_UPDATED]);
-        } elseif ($tab === 'held') {
-            $q->whereIn('processing_status', [Rec::HELD, Rec::FAILED]);
-        }
-
-        if ($s = $request->query('store')) {
-            $q->whereHas('store', fn ($x) => $x->where('store_id', $s));
-        }
-        if ($st = $request->query('status')) {
-            $q->where('processing_status', $st);
-        }
-        if ($c = $request->query('classification')) {
-            $q->where('classification', $c);
-        }
-        if ($hasName = $request->query('has_name')) {
-            if ($hasName === 'yes') {
-                $q->whereNotNull('customer_name');
-            } elseif ($hasName === 'no') {
-                $q->whereNull('customer_name');
-            }
-        }
-        if ($o = $request->query('outcome')) {
-            $q->where('hold_reason', $o);
-        }
-        if ($f = $request->query('from')) {
-            $q->whereDate('first_observed_at', '>=', $f);
-        }
-        if ($t = $request->query('to')) {
-            $q->whereDate('first_observed_at', '<=', $t);
-        }
+        $q = $this->buildRecordsQuery($request);
 
         $perPage = (int) $request->query('per_page', 15);
         if (! in_array($perPage, [15, 25, 50, 100], true)) {
@@ -204,29 +165,135 @@ class DashboardController extends Controller
         ]);
     }
 
-    /** Credit history: reloads, bonuses and vends ingested from /api/transact. */
-    public function transactions(Request $request)
+    /** Stream export of filtered customer records to CSV. */
+    public function exportRecords(Request $request)
     {
-        $q = \App\Models\LaundrycardTransaction::with(['store'])->latest('occurred_at')->latest('id');
+        $q = $this->buildRecordsQuery($request);
+        $filename = 'customer-records-' . now()->format('Y-m-d') . '.csv';
 
-        $card = trim((string) $request->query('card'));
-        if ($card !== '') {
-            $q->where('card_number', 'like', "%{$card}%");
+        return response()->streamDownload(function () use ($q) {
+            $handle = fopen('php://output', 'w');
+            fputs($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+
+            fputcsv($handle, [
+                'Card Number',
+                'Store ID',
+                'Store Name',
+                'First Name',
+                'Last Name',
+                'Customer Full Name',
+                'Email',
+                'Phone',
+                'Current Balance',
+                'Classification',
+                'Eligibility Status',
+                'Eligibility Reason',
+                'Processing Status',
+                'Hold Reason',
+                'Reload Count',
+                'Reload Total ($)',
+                'GHL Location ID',
+                'GHL Contact ID',
+                'First Observed (UTC)',
+                'Last Observed (UTC)',
+                'Synced At (UTC)',
+            ]);
+
+            $q->chunk(500, function ($records) use ($handle) {
+                foreach ($records as $r) {
+                    [$first, $last] = \App\Support\Normalizer::splitName($r->customer_name);
+                    fputcsv($handle, [
+                        $r->card_number,
+                        $r->store->store_id ?? '',
+                        $r->store->name ?? '',
+                        $first ?? '',
+                        $last ?? '',
+                        $r->customer_name ?? '',
+                        $r->customer_email ?? '',
+                        $r->customer_phone ?? '',
+                        $r->balance !== null ? number_format((float) $r->balance, 2, '.', '') : '',
+                        $r->classification ?? '',
+                        $r->eligibility_status ?? '',
+                        $r->eligibility_reason ?? '',
+                        $r->processing_status ?? '',
+                        $r->hold_reason ?? '',
+                        $r->reload_count ?? 0,
+                        $r->reload_total !== null ? number_format((float) $r->reload_total, 2, '.', '') : '0.00',
+                        $r->destination_location_id ?? ($r->connection?->location_id ?? ''),
+                        $r->contactMapping?->ghl_contact_id ?? '',
+                        $r->first_observed_at?->toIso8601String() ?? '',
+                        $r->last_observed_at?->toIso8601String() ?? '',
+                        $r->synced_at?->toIso8601String() ?? '',
+                    ]);
+                }
+            });
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache',
+        ]);
+    }
+
+    private function buildRecordsQuery(Request $request)
+    {
+        $tab = $request->query('tab');
+        $q = Rec::with(['store', 'connection', 'contactMapping'])
+            ->withCount(['transactions as reload_count' => fn ($tx) => $tx->where('transaction_type', 'reload')])
+            ->withSum(['transactions as reload_total' => fn ($tx) => $tx->where('transaction_type', 'reload')], 'amount')
+            ->latest('first_observed_at');
+
+        // Quick search by card number
+        if ($search = trim((string) $request->query('search', $request->query('q')))) {
+            $q->where('card_number', 'like', "%{$search}%");
         }
+
+        // Quick Tab Presets
+        if ($tab === 'new') {
+            $q->where('classification', Rec::NEW_OBSERVED);
+        } elseif ($tab === 'named') {
+            $q->whereNotNull('customer_name');
+        } elseif ($tab === 'synced') {
+            $q->whereIn('processing_status', [Rec::SYNCED_CREATED, Rec::SYNCED_UPDATED]);
+        } elseif ($tab === 'held') {
+            $q->whereIn('processing_status', [Rec::HELD, Rec::FAILED]);
+        }
+
         if ($s = $request->query('store')) {
             $q->whereHas('store', fn ($x) => $x->where('store_id', $s));
         }
-        if ($t = $request->query('type')) {
-            $t === 'unknown'
-                ? $q->where(fn ($x) => $x->where('transaction_type', 'unknown')->orWhereNull('transaction_type'))
-                : $q->where('transaction_type', $t);
+        if ($st = $request->query('status')) {
+            $q->where('processing_status', $st);
+        }
+        if ($c = $request->query('classification')) {
+            $q->where('classification', $c);
+        }
+        if ($hasName = $request->query('has_name')) {
+            if ($hasName === 'yes') {
+                $q->whereNotNull('customer_name');
+            } elseif ($hasName === 'no') {
+                $q->whereNull('customer_name');
+            }
+        }
+        if ($o = $request->query('outcome')) {
+            $q->where('hold_reason', $o);
         }
         if ($f = $request->query('from')) {
-            $q->whereDate('occurred_at', '>=', $f);
+            $q->whereDate('first_observed_at', '>=', $f);
         }
-        if ($to = $request->query('to')) {
-            $q->whereDate('occurred_at', '<=', $to);
+        if ($t = $request->query('to')) {
+            $q->whereDate('first_observed_at', '<=', $t);
         }
+
+        return $q;
+    }
+
+    /** Credit history: reloads, bonuses and vends ingested from /api/transact. */
+    public function transactions(Request $request)
+    {
+        $q = $this->buildTransactionsQuery($request);
+
+        $card = trim((string) $request->query('card'));
 
         // Summary for the (filtered) set.
         $sumBase = clone $q;
@@ -248,6 +315,95 @@ class DashboardController extends Controller
             'record' => $record,
             'totalStored' => \App\Models\LaundrycardTransaction::count(),
         ]);
+    }
+
+    /** Stream export of filtered transactions/credit history to CSV. */
+    public function exportTransactions(Request $request)
+    {
+        $q = $this->buildTransactionsQuery($request);
+        $filename = 'credit-history-' . now()->format('Y-m-d') . '.csv';
+
+        return response()->streamDownload(function () use ($q) {
+            $handle = fopen('php://output', 'w');
+            fputs($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+
+            fputcsv($handle, [
+                'Transaction ID',
+                'Occurred At (UTC)',
+                'Store ID',
+                'Store Name',
+                'Card Number',
+                'First Name',
+                'Last Name',
+                'Customer Full Name',
+                'Transaction Type',
+                'Raw Type Code',
+                'Amount ($)',
+                'Bonus Amount ($)',
+                'Balance After ($)',
+                'Machine Number',
+                'Transaction Ref',
+                'Additional Detail',
+            ]);
+
+            $q->chunk(500, function ($transactions) use ($handle) {
+                foreach ($transactions as $t) {
+                    $name = $t->sourceRecord?->customer_name;
+                    [$first, $last] = \App\Support\Normalizer::splitName($name);
+                    $info = is_array($t->raw_payload) ? ($t->raw_payload['AdditionalInfo'] ?? '') : '';
+
+                    fputcsv($handle, [
+                        $t->id,
+                        $t->occurred_at?->toIso8601String() ?? '',
+                        $t->store->store_id ?? '',
+                        $t->store->name ?? '',
+                        $t->card_number,
+                        $first ?? '',
+                        $last ?? '',
+                        $name ?? '',
+                        $t->transaction_type ?? 'unknown',
+                        $t->transaction_type_raw ?? '',
+                        $t->amount !== null ? number_format((float) $t->amount, 2, '.', '') : '',
+                        $t->bonus_amount !== null ? number_format((float) $t->bonus_amount, 2, '.', '') : '',
+                        $t->balance_after !== null ? number_format((float) $t->balance_after, 2, '.', '') : '',
+                        $t->mach_no ?? '',
+                        $t->transaction_ref ?? '',
+                        (string) $info,
+                    ]);
+                }
+            });
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache',
+        ]);
+    }
+
+    private function buildTransactionsQuery(Request $request)
+    {
+        $q = \App\Models\LaundrycardTransaction::with(['store', 'sourceRecord'])->latest('occurred_at')->latest('id');
+
+        $card = trim((string) $request->query('card'));
+        if ($card !== '') {
+            $q->where('card_number', 'like', "%{$card}%");
+        }
+        if ($s = $request->query('store')) {
+            $q->whereHas('store', fn ($x) => $x->where('store_id', $s));
+        }
+        if ($t = $request->query('type')) {
+            $t === 'unknown'
+                ? $q->where(fn ($x) => $x->where('transaction_type', 'unknown')->orWhereNull('transaction_type'))
+                : $q->where('transaction_type', $t);
+        }
+        if ($f = $request->query('from')) {
+            $q->whereDate('occurred_at', '>=', $f);
+        }
+        if ($to = $request->query('to')) {
+            $q->whereDate('occurred_at', '<=', $to);
+        }
+
+        return $q;
     }
 
     public function logs(Request $request)

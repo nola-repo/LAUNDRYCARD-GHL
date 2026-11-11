@@ -476,6 +476,15 @@ class CustomerDiscoveryService
             $attrs['phone_hash'] = Normalizer::hash($phone);
         }
 
+        // If an anonymous record that was previously skipped now acquires contact
+        // details (e.g. from POS enrichment or updated kiosk data), re-activate it.
+        if ($record->processing_status === Rec::SKIPPED && $record->hold_reason === 'no_contact_identifier') {
+            if (! empty($customer['name']) || $email || $phone) {
+                $attrs['processing_status'] = Rec::PENDING;
+                $attrs['hold_reason'] = null;
+            }
+        }
+
         $wasEligible = $previousEligibility === Rec::BALANCE_ELIGIBLE;
         if ($eligibility === Rec::BALANCE_ELIGIBLE && ! $record->isSynced()) {
             // A zero or negative card that transitions to positive balance qualifies for release.
@@ -543,10 +552,32 @@ class CustomerDiscoveryService
                 continue;
             }
 
+            // Optimization 1: Fast-skip completely anonymous records (no email, no phone, no name)
+            // in bulk. ContactSyncService skips these anyway with 'no_contact_identifier'. Handling
+            // them here prevents thousands of redundant queue jobs over remote database connections.
+            (clone $base)->where(function ($q) {
+                $q->where('processing_status', Rec::PENDING)
+                    ->orWhere(fn ($q2) => $q2->where('processing_status', Rec::HELD)->whereIn('hold_reason', self::RELEASABLE_HOLDS));
+            })
+            ->where(function ($q) {
+                $q->whereNull('customer_email')->orWhere('customer_email', '');
+            })
+            ->where(function ($q) {
+                $q->whereNull('customer_phone')->orWhere('customer_phone', '');
+            })
+            ->where(function ($q) {
+                $q->whereNull('customer_name')->orWhere('customer_name', '');
+            })
+            ->update(['processing_status' => Rec::SKIPPED, 'hold_reason' => 'no_contact_identifier']);
+
+            // Optimization 2: Prioritize identifiable customer contacts at the front of the queue.
             $ids = (clone $base)->where(function ($q) {
                 $q->where('processing_status', Rec::PENDING)
                     ->orWhere(fn ($q2) => $q2->where('processing_status', Rec::HELD)->whereIn('hold_reason', self::RELEASABLE_HOLDS));
-            })->limit((int) config('integration.sync.dispatch_batch'))->pluck('id');
+            })
+            ->orderByRaw("CASE WHEN (customer_email IS NOT NULL AND customer_email != '') OR (customer_phone IS NOT NULL AND customer_phone != '') OR (customer_name IS NOT NULL AND customer_name != '') THEN 0 ELSE 1 END")
+            ->limit((int) config('integration.sync.dispatch_batch', 200))
+            ->pluck('id');
 
             foreach ($ids as $id) {
                 $claimed = Rec::whereKey($id)->whereIn('processing_status', [Rec::PENDING, Rec::HELD])

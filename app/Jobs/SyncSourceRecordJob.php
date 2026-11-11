@@ -40,6 +40,11 @@ class SyncSourceRecordJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        // Fast skip if record is already synced, skipped, or not in actionable status
+        if ($record->isSynced() || $record->processing_status === Rec::SKIPPED) {
+            return;
+        }
+
         try {
             $sync->process($record, $this->correlationId, $this->userId);
         } catch (RetryableException $e) {

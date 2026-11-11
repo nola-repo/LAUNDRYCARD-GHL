@@ -5,6 +5,14 @@
 @if(session('flash_success'))
 <div class="notice ok">{{ session('flash_success') }}</div>
 @endif
+@if(session('error'))
+<div class="notice err">{{ session('error') }}</div>
+@endif
+@if(session('result'))
+<div class="notice ok">
+  <strong>{{ session('result.title') }}</strong> — Location: {{ session('result.data.location') ?? 'Verified' }} (HTTP {{ session('result.data.http_status') ?? 200 }})
+</div>
+@endif
 
 <div class="page-head">
   <div>
@@ -16,6 +24,13 @@
     <p class="sub">Location-scoped GoHighLevel connections registered through OAuth. Access and refresh tokens are encrypted at rest and never displayed.</p>
   </div>
   <div class="btn-row">
+    <form method="post" action="{{ route('admin.connections.refresh-all') }}" style="display:inline">
+      @csrf
+      <button type="submit" class="btn" title="Force proactive token rotation across all connected sub-accounts" onclick="return confirm('Refresh access tokens for all active sub-accounts now?')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        <span>Refresh All Tokens</span>
+      </button>
+    </form>
     <a href="{{ route('admin.connect') }}" class="btn primary">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       <span>Connect location</span>
@@ -103,12 +118,14 @@
           <th>Location ID</th>
           <th>Sub-Account Name</th>
           <th>Status</th>
+          <th>Token Health &amp; Expiry</th>
+          <th>Last Refreshed</th>
           <th>Granted Scopes</th>
-          <th>Token Health</th>
           <th>Installed</th>
           <th>Last API Success</th>
           <th>Recent Errors</th>
           <th>Mapped Store</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -118,26 +135,34 @@
           <td style="font-weight:700;color:var(--text-title);min-width:170px">{{ $c->location_name ?? '—' }}</td>
           <td class="nowrap">
             <x-badge :value="$c->status"/>
-            @if($c->status === 'revoked' || $c->tokenExpiryState() === 'expired')
-              <div style="margin-top:6px">
-                <a href="{{ route('admin.connect') }}" class="btn sm primary" style="padding:4px 10px;font-size:11px">Reconnect OAuth</a>
-              </div>
+          </td>
+          <td class="nowrap">
+            <x-badge :value="$c->tokenExpiryState()"/>
+            <div class="muted" style="font-size:11px;margin-top:3px" title="{{ $c->expires_at?->format('Y-m-d H:i:s') }} UTC">
+              Expires: {{ $c->expires_at?->diffForHumans() ?? '—' }}
+            </div>
+            @if($c->expires_at)
+              <div class="muted mono" style="font-size:10px">{{ $c->expires_at->format('M d, H:i') }} UTC</div>
             @endif
           </td>
-          <td style="min-width:210px">
+          <td class="nowrap">
+            @if($c->last_refreshed_at)
+              <span style="font-size:12px;font-weight:600;color:var(--text-title)">{{ $c->last_refreshed_at->diffForHumans() }}</span>
+              <div class="muted mono" style="font-size:10px">{{ $c->last_refreshed_at->format('M d, H:i') }} UTC</div>
+            @else
+              <span class="muted" style="font-size:12px">Never</span>
+            @endif
+          </td>
+          <td style="min-width:180px">
             <div class="tag-row" style="margin-top:0">
               @foreach($c->scopes ?? [] as $scope)
                 <span class="tag-chip">{{ $scope }}</span>
               @endforeach
             </div>
           </td>
-          <td class="nowrap">
-            <x-badge :value="$c->tokenExpiryState()"/>
-            <div class="muted" style="font-size:11px;margin-top:3px">{{ $c->expires_at?->diffForHumans() }}</div>
-          </td>
           <td class="muted nowrap">{{ $c->installed_at?->toDateString() ?? '—' }}</td>
           <td class="nowrap">{{ $c->last_success_at?->diffForHumans() ?? 'never' }}</td>
-          <td style="max-width:220px">
+          <td style="max-width:200px">
             @if($c->last_error)
               <div class="err-txt" style="margin:0">{{ $c->last_error }}</div>
             @endif
@@ -156,10 +181,30 @@
               <x-badge value="unmapped"/>
             @endif
           </td>
+          <td class="nowrap">
+            @if($c->status === 'revoked' || $c->tokenExpiryState() === 'expired')
+              <a href="{{ route('admin.connect') }}" class="btn sm primary" style="padding:4px 10px;font-size:11px">Reconnect OAuth</a>
+            @else
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <form method="post" action="{{ route('admin.connections.refresh', $c) }}" style="display:inline">
+                  @csrf
+                  <button type="submit" class="btn sm" style="padding:3px 8px;font-size:11px" title="Proactively rotate access token and refresh token now">
+                    ↻ Refresh
+                  </button>
+                </form>
+                <form method="post" action="{{ route('admin.connections.test', $c) }}" style="display:inline">
+                  @csrf
+                  <button type="submit" class="btn sm" style="padding:3px 8px;font-size:11px" title="Test GHL API connectivity">
+                    Test
+                  </button>
+                </form>
+              </div>
+            @endif
+          </td>
         </tr>
         @empty
         <tr>
-          <td colspan="9">
+          <td colspan="11">
             <div class="empty-state-box">
               <div class="empty-state-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
@@ -174,6 +219,46 @@
     </table>
   </div>
 </div>
+
+@if(isset($recentOauthEvents) && $recentOauthEvents->isNotEmpty())
+<div class="table-card" style="margin-top:24px">
+  <div class="table-card-header">
+    <div>
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        Recent OAuth Lifecycle &amp; Token Rotation Log
+      </h2>
+      <span class="muted" style="font-size:12px">Telemetry tracking automatic proactive refresh cycles and token rotations across all sub-accounts</span>
+    </div>
+    <span class="badge b-info">Live Rotation Trail</span>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>Location ID</th>
+          <th>Stage</th>
+          <th>Outcome</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        @foreach($recentOauthEvents as $ev)
+        <tr>
+          <td class="nowrap" style="font-size:12px;color:var(--text-title);font-weight:600">{{ $ev->created_at->format('M d, Y H:i:s') }}</td>
+          <td class="nowrap"><span class="card-mono">{{ $ev->ghl_location_id ?? 'Global' }}</span></td>
+          <td class="nowrap"><span class="mono" style="font-size:11px">{{ $ev->stage }}</span></td>
+          <td class="nowrap"><x-badge :value="$ev->outcome"/></td>
+          <td style="font-size:12px">{{ $ev->message }}</td>
+        </tr>
+        @endforeach
+      </tbody>
+    </table>
+  </div>
+</div>
+@endif
 
 <script>
 function copyAuthUrl() {

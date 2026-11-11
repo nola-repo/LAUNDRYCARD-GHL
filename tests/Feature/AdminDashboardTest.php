@@ -143,4 +143,104 @@ class AdminDashboardTest extends TestCase
         $this->get('/api/cron/discovery', ['Authorization' => 'Bearer valid_secret_123'])->assertOk();
         $this->get('/api/cron/discovery?secret=valid_secret_123')->assertOk();
     }
+
+    public function test_records_csv_export_streams_filtered_data(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $store = \App\Models\LaundrycardStore::where('store_id', '0160')->first();
+
+        \App\Models\LaundrycardSourceRecord::create([
+            'laundrycard_store_id' => $store->id,
+            'card_number'          => 'EXP_CARD_100',
+            'classification'       => \App\Models\LaundrycardSourceRecord::NEW_OBSERVED,
+            'processing_status'    => \App\Models\LaundrycardSourceRecord::PENDING,
+            'balance'              => '25.00',
+            'eligibility_status'   => \App\Models\LaundrycardSourceRecord::BALANCE_ELIGIBLE,
+            'eligibility_reason'   => 'positive_balance',
+            'customer_name'        => 'John Doe',
+            'customer_email'       => 'john@example.test',
+            'first_observed_at'    => now(),
+            'last_observed_at'     => now(),
+        ]);
+
+        $a = $this->actingAs($this->admin());
+        $res = $a->get(route('admin.records.export'))->assertOk();
+
+        $this->assertTrue($res->headers->contains('content-type', 'text/csv; charset=UTF-8'));
+        $content = $res->streamedContent();
+        $this->assertStringContainsString('Card Number', $content);
+        $this->assertStringContainsString('EXP_CARD_100', $content);
+        $this->assertStringContainsString('John', $content);
+        $this->assertStringContainsString('Doe', $content);
+    }
+
+    public function test_transactions_csv_export_and_view_display_first_and_last_name(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $store = \App\Models\LaundrycardStore::where('store_id', '0160')->first();
+
+        $rec = \App\Models\LaundrycardSourceRecord::create([
+            'laundrycard_store_id' => $store->id,
+            'card_number'          => 'TX_CARD_200',
+            'classification'       => \App\Models\LaundrycardSourceRecord::NEW_OBSERVED,
+            'processing_status'    => \App\Models\LaundrycardSourceRecord::PENDING,
+            'balance'              => '50.00',
+            'eligibility_status'   => \App\Models\LaundrycardSourceRecord::BALANCE_ELIGIBLE,
+            'customer_name'        => 'Alice Smith',
+            'first_observed_at'    => now(),
+            'last_observed_at'     => now(),
+        ]);
+
+        \App\Models\LaundrycardTransaction::create([
+            'laundrycard_store_id' => $store->id,
+            'source_record_id'     => $rec->id,
+            'card_number'          => 'TX_CARD_200',
+            'occurred_at'          => now(),
+            'transaction_type'     => 'reload',
+            'amount'               => '20.00',
+            'balance_after'        => '50.00',
+            'raw_payload'          => ['AdditionalInfo' => 'Reload test'],
+        ]);
+
+        $a = $this->actingAs($this->admin());
+
+        // 1. View renders First Name and Last Name
+        $viewRes = $a->get(route('admin.transactions'))->assertOk();
+        $this->assertStringContainsString('First Name', $viewRes->getContent());
+        $this->assertStringContainsString('Last Name', $viewRes->getContent());
+        $this->assertStringContainsString('Alice', $viewRes->getContent());
+        $this->assertStringContainsString('Smith', $viewRes->getContent());
+
+        // 2. CSV export streams transaction record with names
+        $csvRes = $a->get(route('admin.transactions.export'))->assertOk();
+        $this->assertTrue($csvRes->headers->contains('content-type', 'text/csv; charset=UTF-8'));
+        $content = $csvRes->streamedContent();
+        $this->assertStringContainsString('TX_CARD_200', $content);
+        $this->assertStringContainsString('Alice', $content);
+        $this->assertStringContainsString('Smith', $content);
+    }
+
+    public function test_admin_can_refresh_single_and_batch_oauth_tokens(): void
+    {
+        $this->verifiedMapping('0160', 'LOC_A');
+        $conn = \App\Models\GhlConnection::where('location_id', 'LOC_A')->first();
+
+        $this->httpFake([
+            'services.leadconnectorhq.com/oauth/token' => \Illuminate\Support\Facades\Http::response([
+                'access_token'  => 'new_refreshed_access_token',
+                'refresh_token' => 'new_refreshed_refresh_token',
+                'expires_in'    => 86400,
+                'scope'         => 'contacts.readonly contacts.write locations.readonly',
+            ]),
+        ]);
+
+        $a = $this->actingAs($this->admin());
+
+        // Refresh single
+        $a->post(route('admin.connections.refresh', $conn))->assertRedirect();
+        $this->assertNotNull($conn->fresh()->last_refreshed_at);
+
+        // Refresh batch
+        $a->post(route('admin.connections.refresh-all'))->assertRedirect();
+    }
 }

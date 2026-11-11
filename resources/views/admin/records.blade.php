@@ -29,6 +29,12 @@
     </h1>
     <p class="sub" style="margin-bottom:0">Persisted LaundryCard accounts, customer identities, and synchronization status to GoHighLevel.</p>
   </div>
+  <div class="btn-row">
+    <a href="{{ route('admin.records.export', request()->query()) }}" class="btn" title="Export matching filtered customer records to CSV">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span>Export CSV</span>
+    </a>
+  </div>
 </div>
 
 {{-- Top Metrics Overview --}}
@@ -249,6 +255,10 @@
           <span>Apply Filters</span>
         </button>
         <a class="btn" href="{{ route('admin.records') }}">Reset All</a>
+        <a class="btn" href="{{ route('admin.records.export', request()->query()) }}" title="Download filtered records as CSV">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>Export CSV</span>
+        </a>
       </div>
       <div class="muted" style="font-size:12px">
         Showing <strong>{{ $records->firstItem() ?? 0 }}–{{ $records->lastItem() ?? 0 }}</strong> of <strong>{{ number_format($records->total()) }}</strong> matching records

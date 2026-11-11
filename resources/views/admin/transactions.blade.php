@@ -33,6 +33,12 @@
     <h1>Credit History</h1>
     <p class="sub">Card reloads, bonuses, and machine usage pulled from LaundryCard <code>/api/transact</code>. {{ number_format($totalStored) }} transactions stored in total.</p>
   </div>
+  <div class="btn-row">
+    <a href="{{ route('admin.transactions.export', request()->query()) }}" class="btn" title="Export matching filtered transactions to CSV">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span>Export CSV</span>
+    </a>
+  </div>
 </div>
 
 @if($record)
@@ -141,6 +147,10 @@
           <span>Apply Filters</span>
         </button>
         <a class="btn" href="{{ route('admin.transactions') }}">Reset</a>
+        <a class="btn" href="{{ route('admin.transactions.export', request()->query()) }}" title="Download filtered entries as CSV">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>Export CSV</span>
+        </a>
       </div>
       <div class="muted" style="font-size:12px">
         Showing <strong>{{ $transactions->firstItem() ?? 0 }}–{{ $transactions->lastItem() ?? 0 }}</strong> of <strong>{{ number_format($transactions->total()) }}</strong> entries
@@ -157,6 +167,8 @@
           <th>When (UTC)</th>
           <th>Store</th>
           <th>Card #</th>
+          <th>First Name</th>
+          <th>Last Name</th>
           <th>Type</th>
           <th>Amount</th>
           <th>Balance After</th>
@@ -169,11 +181,27 @@
         @php
           $info = is_array($t->raw_payload) ? ($t->raw_payload['AdditionalInfo'] ?? '') : '';
           $tt = $t->transaction_type ?? 'unknown';
+          $custName = $t->sourceRecord?->customer_name;
+          [$first, $last] = \App\Support\Normalizer::splitName($custName);
         @endphp
         <tr>
           <td style="font-weight:600;color:var(--text-title)">{{ $t->occurred_at->format('M d, Y H:i:s') }}</td>
           <td><span class="store-id-pill">#{{ $t->store->store_id ?? '' }}</span></td>
           <td><a class="card-mono" href="{{ route('admin.transactions', ['card' => $t->card_number]) }}">{{ $t->card_number }}</a></td>
+          <td style="font-weight:600;color:var(--text-title)">
+            @if($first)
+              {{ ucwords(strtolower($first)) }}
+            @else
+              <span class="muted">—</span>
+            @endif
+          </td>
+          <td style="font-weight:600;color:var(--text-title)">
+            @if($last)
+              {{ ucwords(strtolower($last)) }}
+            @else
+              <span class="muted">—</span>
+            @endif
+          </td>
           <td>
             <span class="badge {{ $typeBadge[$tt] ?? 'b-mute' }}">{{ $typeLabels[$tt] ?? $tt }}</span>
             @if($tt === 'unknown')
@@ -195,7 +223,7 @@
         </tr>
       @empty
         <tr>
-          <td colspan="8">
+          <td colspan="10">
             <div class="empty-state-box">
               <div class="empty-state-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
