@@ -45,6 +45,15 @@ class SyncSourceRecordJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        // Anonymous card (no email, phone or name): nothing to send to GHL.
+        // Skip without touching the GHL API or creating sync attempts.
+        if (blank($record->customer_email) && blank($record->customer_phone) && blank($record->customer_name)) {
+            Rec::whereKey($record->id)->whereIn('processing_status', [Rec::QUEUED, Rec::PENDING])
+                ->update(['processing_status' => Rec::SKIPPED, 'hold_reason' => 'no_contact_identifier']);
+
+            return;
+        }
+
         try {
             $sync->process($record, $this->correlationId, $this->userId);
         } catch (RetryableException $e) {

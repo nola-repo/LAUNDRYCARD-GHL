@@ -1,0 +1,44 @@
+name: Contact Sync Queue Drainer
+
+on:
+  schedule:
+    # GitHub's minimum schedule interval is 5 minutes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: queue-drainer
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    name: Drain GHL contact sync queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+
+    steps:
+      - name: Process queued sync jobs
+        env:
+          APP_URL: ${{ secrets.APP_URL || 'https://laundrycard-sync.vercel.app' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'lc_sec_8f9c1e74a2b6d0e82f41973b5c0e1847' }}
+        run: |
+          # Up to 4 back-to-back passes (~25s each) per run while a backlog remains.
+          for i in 1 2 3 4; do
+            RESP=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Accept: application/json" \
+              --max-time 45 \
+              "${APP_URL}/api/cron/queue")
+            STATUS=$(echo "${RESP}" | grep "HTTP_STATUS:" | cut -d':' -f2)
+            BODY=$(echo "${RESP}" | sed -e '/HTTP_STATUS:/,$d')
+            echo "Pass ${i}: HTTP ${STATUS} ${BODY}"
+            if [ "${STATUS}" != "200" ]; then
+              exit 1
+            fi
+            BACKLOG=$(echo "${BODY}" | grep -o '"backlog":[0-9]*' | cut -d':' -f2)
+            PROCESSED=$(echo "${BODY}" | grep -o '"processed":[0-9]*' | cut -d':' -f2)
+            if [ "${BACKLOG:-0}" = "0" ] || [ "${PROCESSED:-0}" = "0" ]; then
+              echo "Queue drained or nothing runnable; stopping."
+              break
+            fi
+          done

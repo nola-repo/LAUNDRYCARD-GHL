@@ -103,11 +103,23 @@ $cronHandler = function (\Illuminate\Http\Request $request, string $task) {
             'tokens'      => $tokenSummary,
         ], $tokenSummary['failed'] === 0 ? 200 : 500);
     } elseif ($task === 'queue') {
-        // Vercel serverless: process a small bounded batch of queued jobs.
-        // Each invocation handles up to 5 jobs to stay within the 30s maxDuration.
+        // Vercel serverless: drain as many queued jobs as fit in a time budget
+        // (maxDuration=30s). Called frequently by the GitHub Actions queue drainer.
+        $budget = (float) $request->query('budget', 22);
+        $budget = max(5, min(24, $budget));
+
+        // Recover records orphaned in 'processing' by a killed invocation:
+        // send them back to pending so dispatchPending() re-queues them.
+        $recovered = \App\Models\LaundrycardSourceRecord::where('processing_status', \App\Models\LaundrycardSourceRecord::PROCESSING)
+            ->where(fn ($q) => $q->whereNull('last_attempt_at')->orWhere('last_attempt_at', '<', now()->subMinutes(15)))
+            ->update(['processing_status' => \App\Models\LaundrycardSourceRecord::PENDING]);
+
         $processed = 0;
         $failed    = 0;
-        for ($i = 0; $i < 5; $i++) {
+        while ((microtime(true) - $startedAt) < $budget) {
+            if (! \Illuminate\Support\Facades\DB::table('jobs')->where('available_at', '<=', now()->timestamp)->whereNull('reserved_at')->exists()) {
+                break; // nothing runnable right now
+            }
             $exit = \Illuminate\Support\Facades\Artisan::call('queue:work', [
                 'connection' => config('queue.default'),
                 '--once'    => true,
@@ -115,16 +127,8 @@ $cronHandler = function (\Illuminate\Http\Request $request, string $task) {
                 '--timeout' => 20,
                 '--stop-when-empty' => true,
             ]);
-            if ($exit === 0) {
-                $processed++;
-            } elseif ($exit === 1) {
-                // Queue was empty — stop early.
-                break;
-            } else {
-                $failed++;
-            }
-            // Check remaining time budget (Vercel maxDuration=30s).
-            if ((microtime(true) - $startedAt) > 24) {
+            $exit === 0 ? $processed++ : $failed++;
+            if ($failed >= 3) {
                 break;
             }
         }
@@ -136,6 +140,7 @@ $cronHandler = function (\Illuminate\Http\Request $request, string $task) {
             'task'        => $task,
             'processed'   => $processed,
             'failed'      => $failed,
+            'recovered'   => $recovered,
             'backlog'     => $backlog,
             'duration_ms' => $duration,
         ]);

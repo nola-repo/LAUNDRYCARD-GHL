@@ -220,6 +220,32 @@ class AdminDashboardTest extends TestCase
         $this->assertStringContainsString('Smith', $content);
     }
 
+    public function test_queue_cron_drains_jobs_and_recovers_stuck_processing_records(): void
+    {
+        config(['integration.cron_secret' => 'valid_secret_123', 'queue.default' => 'database']);
+        $this->verifiedMapping('0160', 'LOC_A');
+        $store = \App\Models\LaundrycardStore::where('store_id', '0160')->first();
+        $base = [
+            'laundrycard_store_id' => $store->id, 'classification' => \App\Models\LaundrycardSourceRecord::NEW_OBSERVED,
+            'balance' => '10.00', 'eligibility_status' => \App\Models\LaundrycardSourceRecord::BALANCE_ELIGIBLE,
+            'first_observed_at' => now(), 'last_observed_at' => now(),
+        ];
+        $stuck = \App\Models\LaundrycardSourceRecord::create($base + ['card_number' => 'STUCK_1', 'processing_status' => 'processing', 'last_attempt_at' => now()->subHour(), 'customer_name' => 'Stuck Person']);
+        $anon = \App\Models\LaundrycardSourceRecord::create($base + ['card_number' => 'ANON_1', 'processing_status' => 'queued']);
+        \App\Jobs\SyncSourceRecordJob::dispatch($anon->id, 'corr-test');
+
+        $this->httpFake($this->ghlFake());
+        $res = $this->get('/api/cron/queue', ['Authorization' => 'Bearer valid_secret_123'])->assertOk();
+
+        $this->assertSame(1, $res->json('recovered'));
+        $this->assertSame(1, $res->json('processed'));
+        $this->assertSame(0, $res->json('backlog'));
+        $this->assertSame('pending', $stuck->fresh()->processing_status);
+        $this->assertSame('skipped', $anon->fresh()->processing_status);
+        $this->assertSame('no_contact_identifier', $anon->fresh()->hold_reason);
+        $this->assertCount(0, $this->ghlSent('/contacts'));
+    }
+
     public function test_admin_can_refresh_single_and_batch_oauth_tokens(): void
     {
         $this->verifiedMapping('0160', 'LOC_A');
