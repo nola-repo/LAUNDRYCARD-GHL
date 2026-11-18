@@ -161,13 +161,22 @@ $cronHandler = function (\Illuminate\Http\Request $request, string $task) {
             'run_status' => $run?->status,
             'stats'      => $run?->stats,
         ], $exit === 0 ? 200 : 500);
+    } elseif ($task === 'metrics') {
+        $exit = \Illuminate\Support\Facades\Artisan::call('integration:daily-metrics');
+        $duration = (int) round((microtime(true) - $startedAt) * 1000);
+
+        return response()->json([
+            'status'      => $exit === 0 ? 'completed' : 'failed',
+            'task'        => $task,
+            'duration_ms' => $duration,
+        ], $exit === 0 ? 200 : 500);
     } else {
         abort(404);
     }
 };
 
-Route::get('/api/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue', 'transact', 'tokens'])->name('cron.task');
-Route::get('/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue', 'transact', 'tokens']);
+Route::get('/api/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue', 'transact', 'tokens', 'metrics'])->name('cron.task');
+Route::get('/cron/{task}', $cronHandler)->whereIn('task', ['discovery', 'queue', 'transact', 'tokens', 'metrics']);
 
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/', [DashboardController::class, 'overview'])->name('overview');

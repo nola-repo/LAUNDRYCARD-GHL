@@ -1,0 +1,44 @@
+name: Daily Metrics Collection
+
+on:
+  schedule:
+    # Runs once per day at 02:00 UTC (Mon–Sat)
+    - cron: '0 2 * * 1-6'
+  workflow_dispatch:
+
+concurrency:
+  group: daily-metrics
+  cancel-in-progress: false
+
+jobs:
+  metrics:
+    name: Collect daily integration metrics
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Trigger Daily Metrics Endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL || 'https://laundrycard-sync.vercel.app' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          echo "Collecting daily metrics at $(date -u)..."
+          HTTP_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME_TOTAL:%{time_total}" \
+            -X GET "${APP_URL}/api/cron/metrics" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Accept: application/json" \
+            --max-time 30)
+
+          BODY=$(echo "${HTTP_RESPONSE}" | sed -e '/HTTP_STATUS:/,$d')
+          STATUS=$(echo "${HTTP_RESPONSE}" | grep "HTTP_STATUS:" | cut -d':' -f2)
+          DURATION=$(echo "${HTTP_RESPONSE}" | grep "TIME_TOTAL:" | cut -d':' -f2)
+
+          echo "Response Status: ${STATUS} (${DURATION}s)"
+          echo "Response Body: ${BODY}"
+
+          if [ "${STATUS}" != "200" ]; then
+            echo "::error::Daily metrics collection failed with HTTP ${STATUS}"
+            exit 1
+          fi
+
+          echo "Daily metrics collected in ${DURATION}s."

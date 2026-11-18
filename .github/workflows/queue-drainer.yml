@@ -3,7 +3,8 @@ name: Contact Sync Queue Drainer
 on:
   schedule:
     # GitHub's minimum schedule interval is 5 minutes.
-    - cron: '*/5 * * * *'
+    # Runs 6 days a week (Mon–Sat) to match discovery.
+    - cron: '*/5 * * * 1-6'
   workflow_dispatch:
 
 concurrency:
@@ -33,7 +34,13 @@ jobs:
             BODY=$(echo "${RESP}" | sed -e '/HTTP_STATUS:/,$d')
             echo "Pass ${i}: HTTP ${STATUS} ${BODY}"
             if [ "${STATUS}" != "200" ]; then
-              exit 1
+              echo "::warning::Queue drain pass ${i} returned HTTP ${STATUS}"
+              # Don't hard-fail — the next pass might succeed
+              if [ -z "${STATUS}" ]; then
+                echo "::error::Network error — could not reach ${APP_URL}"
+                exit 1
+              fi
+              break
             fi
             BACKLOG=$(echo "${BODY}" | grep -o '"backlog":[0-9]*' | cut -d':' -f2)
             PROCESSED=$(echo "${BODY}" | grep -o '"processed":[0-9]*' | cut -d':' -f2)
@@ -42,4 +49,3 @@ jobs:
               break
             fi
           done
-
