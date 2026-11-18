@@ -11,15 +11,7 @@
   "crons": [
     {
       "path": "/api/cron/discovery",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/queue",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/tokens",
-      "schedule": "30 */2 * * *"
+      "schedule": "0 */6 * * *"
     }
   ],
   "routes": [
