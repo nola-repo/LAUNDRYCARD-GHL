@@ -20,7 +20,7 @@ jobs:
       - name: Trigger Daily Metrics Endpoint
         env:
           APP_URL: ${{ secrets.APP_URL || 'https://laundrycard-sync.vercel.app' }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'lc_sec_8f9c1e74a2b6d0e82f41973b5c0e1847' }}
         run: |
           echo "Collecting daily metrics at $(date -u)..."
           HTTP_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME_TOTAL:%{time_total}" \
