@@ -8,7 +8,12 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Poll LaundryCard for new customers (no webhook exists). Overlap-protected.
+// Record daily integration metrics at 02:00 AM
+Schedule::command('integration:daily-metrics')
+    ->dailyAt('02:00')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 Schedule::command('integration:discover')
     ->cron('*/'.max(1, (int) config('integration.discovery.schedule_every_minutes')).' * * * *')
     ->withoutOverlapping(30)

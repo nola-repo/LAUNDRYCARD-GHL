@@ -11,6 +11,7 @@ use App\Support\Normalizer;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Throwable;
+use App\Exceptions\Integration\RetryableException;
 
 /**
  * Polling discovery.
@@ -81,11 +82,12 @@ class CustomerDiscoveryService
                 ->when($onlyStoreId, fn ($q) => $q->where('store_id', Normalizer::storeId($onlyStoreId)))->orderBy('store_id')->get();
 
             foreach ($stores as $store) {
-                $isOfflineOnCooldown = ! $onlyStoreId
-                    && $store->last_scan_status === 'failed'
-                    && str_contains((string) $store->last_scan_error, 'InvalidOperationException')
-                    && $store->last_scan_at
-                    && $store->last_scan_at->gt(now()->subMinutes(60));
+                $offlineCooldown = config('integration.discovery.offline_cooldown_minutes', 60);
+                    $isOfflineOnCooldown = ! $onlyStoreId
+                        && $store->last_scan_status === 'failed'
+                        && str_contains((string) $store->last_scan_error, 'InvalidOperationException')
+                        && $store->last_scan_at
+                        && $store->last_scan_at->gt(now()->subMinutes($offlineCooldown));
 
                 if ($isOfflineOnCooldown) {
                     $stats['stores'][$store->store_id] = [
@@ -175,7 +177,11 @@ class CustomerDiscoveryService
         $overlapMinutes = (int) config('integration.discovery.overlap_minutes', 30);
         $since = \Carbon\CarbonImmutable::parse($cursor)->subMinutes($overlapMinutes)->toIso8601ZuluString();
 
-        $cards = $this->client->cards($store->store_id, minDateTime: $since);
+        $cards = retry(
+    3,
+    fn() => $this->client->cards($store->store_id, minDateTime: $since),
+    config('integration.discovery.rate_limit_backoff_seconds', 60) * 1000
+);
         $res = [
             'mode' => 'incremental',
             'cards_seen' => count($cards),

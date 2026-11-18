@@ -76,6 +76,8 @@ return [
         'max_lookback_hours' => (int) env('INTEGRATION_DISCOVERY_MAX_LOOKBACK_HOURS', 2),
         'max_baseline_batch' => (int) env('INTEGRATION_BASELINE_BATCH', 10000),
         'enrich_with_account_detail' => (bool) env('INTEGRATION_ENRICH_ACCOUNT', true),
+        'offline_cooldown_minutes' => (int) env('INTEGRATION_OFFLINE_COOLDOWN', 60),
+        'rate_limit_backoff_seconds' => (int) env('INTEGRATION_RATE_LIMIT_BACKOFF', 60),
     ],
 
     'cron_secret' => env('INTEGRATION_CRON_KEY', env('CRON_SECRET')),
