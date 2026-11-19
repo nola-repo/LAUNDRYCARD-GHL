@@ -19,7 +19,7 @@ use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function overview(LaundryCardClient $lc)
+    public function overview(Request $request, LaundryCardClient $lc)
     {
         $lastDiscovery = SyncRun::where('type', 'discovery')->whereIn('status', ['completed', 'partial'])->where('mode', 'live')->latest('finished_at')->first();
         $lastRun = SyncRun::where('type', 'discovery')->latest('id')->first();
@@ -27,34 +27,14 @@ class DashboardController extends Controller
         $lastLcApiSuccess = IntegrationEvent::where('stage', 'like', 'api.laundrycard%')->where('http_status', '<', 400)->whereNotNull('http_status')->latest('id')->first();
 
         $cadence = (int) config('integration.discovery.schedule_every_minutes', 15);
-        $nextScheduledRun = $lastRun?->started_at ? $lastRun->started_at->addMinutes($cadence) : null;
-        $lastRunDuration = $lastRun && $lastRun->finished_at ? round($lastRun->started_at->diffInSeconds($lastRun->finished_at, true), 1) : null;
+        $nextScheduledRun = $lastRun?->started_at?->copy()->addMinutes($cadence);
+        $lastRunDuration = $lastRun?->started_at && $lastRun->finished_at ? round($lastRun->started_at->diffInSeconds($lastRun->finished_at, true), 1) : null;
 
-        $stats = [
-            'branches' => LaundrycardStore::where('status', 'active')->count(),
-            'locations' => GhlConnection::count(),
-            'locations_active' => GhlConnection::where('status', GhlConnection::ACTIVE)->count(),
-            'mappings_verified' => BranchMapping::where('status', BranchMapping::VERIFIED)->count(),
-            'unmapped' => LaundrycardStore::where('status', 'active')->whereDoesntHave('activeMapping')->count(),
-            'unassigned_locations' => GhlConnection::whereDoesntHave('activeMapping')->count(),
-            'records' => Rec::count(),
-            'new_customers' => Rec::whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])->count(),
-            'positive_balance' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->count(),
-            'zero_balance' => Rec::where('eligibility_status', Rec::BALANCE_ZERO)->count(),
-            'balance_unknown' => Rec::whereIn('eligibility_status', [Rec::BALANCE_UNKNOWN, Rec::BALANCE_INVALID])->count(),
-            'eligible_pending' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->whereIn('processing_status', [Rec::PENDING, Rec::QUEUED])->count(),
-            'created' => Rec::where('processing_status', Rec::SYNCED_CREATED)->count(),
-            'updated' => Rec::where('processing_status', Rec::SYNCED_UPDATED)->count(),
-            'held' => Rec::where('processing_status', Rec::HELD)->count(),
-            'skipped' => Rec::whereIn('processing_status', [Rec::SKIPPED])->count(),
-            'baseline' => Rec::where('processing_status', Rec::BASELINE_SKIPPED)->count(),
-            'failed' => Rec::where('processing_status', Rec::FAILED)->count(),
-            'failed_attempts' => SyncAttempt::where('status', 'failed')->count(),
-        ];
+        $stats = $this->overviewStats();
 
         $stores = LaundrycardStore::with(['activeMapping.connection'])->withCount('sourceRecords')->orderBy('store_id')->get();
 
-        return view('admin.overview', [
+        $snapshot = [
             'stats' => $stats,
             'stores' => $stores,
             'lcConfigured' => $lc->isConfigured(),
@@ -67,11 +47,62 @@ class DashboardController extends Controller
             'lastRunDuration' => $lastRunDuration,
             'lastSync' => Rec::whereNotNull('synced_at')->max('synced_at'),
             'recentRuns' => SyncRun::latest('id')->limit(8)->get(),
-            'recentEvents' => IntegrationEvent::latest('id')->limit(12)->get(),
+            'recentEvents' => IntegrationEvent::latest('id')->limit(25)->get(),
             'latestNewCustomers' => Rec::with('store')
                 ->whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])
-                ->latest('first_observed_at')->limit(10)->get(),
-        ]);
+                ->latest('first_observed_at')->latest('id')->limit(10)->get(),
+        ];
+
+        // Use the same masked table cells and status labels on first paint and refresh.
+        if ($request->wantsJson()) {
+            $parts = [];
+            foreach (['health', 'balances', 'customers', 'events', 'stores', 'runs'] as $name) {
+                $parts[$name] = view("admin.overview.{$name}", $snapshot)->render();
+            }
+
+            return response()->json([
+                'parts' => $parts,
+                'stats' => $stats,
+                'sync_enabled' => $snapshot['syncEnabled'],
+                'updated_at' => now()->toIso8601String(),
+            ])->header('Cache-Control', 'private, no-store')->header('Vary', 'Accept');
+        }
+
+        return response()->view('admin.overview', $snapshot)
+            ->header('Cache-Control', 'private, no-store')->header('Vary', 'Accept');
+    }
+
+    /** Both dashboard feeds read these totals. Count the record buckets in one database pass. */
+    private function overviewStats(): array
+    {
+        $counts = Rec::query()
+            ->selectRaw('COUNT(*) AS records')
+            ->selectRaw('COUNT(CASE WHEN classification IN (?, ?) THEN 1 END) AS new_customers', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])
+            ->selectRaw('COUNT(CASE WHEN eligibility_status = ? THEN 1 END) AS positive_balance', [Rec::BALANCE_ELIGIBLE])
+            ->selectRaw('COUNT(CASE WHEN eligibility_status = ? THEN 1 END) AS zero_balance', [Rec::BALANCE_ZERO])
+            ->selectRaw('COUNT(CASE WHEN eligibility_status IN (?, ?) THEN 1 END) AS balance_unknown', [Rec::BALANCE_UNKNOWN, Rec::BALANCE_INVALID])
+            ->selectRaw('COUNT(CASE WHEN eligibility_status = ? AND processing_status IN (?, ?) THEN 1 END) AS eligible_pending', [Rec::BALANCE_ELIGIBLE, Rec::PENDING, Rec::QUEUED]);
+
+        foreach ([
+            'created' => Rec::SYNCED_CREATED,
+            'updated' => Rec::SYNCED_UPDATED,
+            'held' => Rec::HELD,
+            'skipped' => Rec::SKIPPED,
+            'baseline' => Rec::BASELINE_SKIPPED,
+            'failed' => Rec::FAILED,
+        ] as $key => $status) {
+            $counts->selectRaw("COUNT(CASE WHEN processing_status = ? THEN 1 END) AS {$key}", [$status]);
+        }
+
+        return array_map('intval', (array) $counts->toBase()->first()) + [
+            'branches' => LaundrycardStore::where('status', 'active')->count(),
+            'locations' => GhlConnection::count(),
+            'locations_active' => GhlConnection::where('status', GhlConnection::ACTIVE)->count(),
+            'mappings_verified' => BranchMapping::where('status', BranchMapping::VERIFIED)->count(),
+            'unmapped' => LaundrycardStore::where('status', 'active')->whereDoesntHave('activeMapping')->count(),
+            'unassigned_locations' => GhlConnection::whereDoesntHave('activeMapping')->count(),
+            'failed_attempts' => SyncAttempt::where('status', 'failed')->count(),
+        ];
     }
 
     public function installations()
@@ -517,26 +548,7 @@ class DashboardController extends Controller
                 'last_call_status' => $lastLcApi?->http_status,
                 'last_success_at' => $lastLcApiSuccess?->created_at?->toIso8601String(),
             ],
-            'stats' => [
-                'branches' => LaundrycardStore::where('status', 'active')->count(),
-                'locations' => GhlConnection::count(),
-                'locations_active' => GhlConnection::where('status', GhlConnection::ACTIVE)->count(),
-                'mappings_verified' => BranchMapping::where('status', BranchMapping::VERIFIED)->count(),
-                'unmapped' => LaundrycardStore::where('status', 'active')->whereDoesntHave('activeMapping')->count(),
-                'unassigned_locations' => GhlConnection::whereDoesntHave('activeMapping')->count(),
-                'records' => Rec::count(),
-                'new_customers' => Rec::whereIn('classification', [Rec::NEW_OBSERVED, Rec::CONFIRMED_NEW])->count(),
-                'positive_balance' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->count(),
-                'zero_balance' => Rec::where('eligibility_status', Rec::BALANCE_ZERO)->count(),
-                'balance_unknown' => Rec::whereIn('eligibility_status', [Rec::BALANCE_UNKNOWN, Rec::BALANCE_INVALID])->count(),
-                'eligible_pending' => Rec::where('eligibility_status', Rec::BALANCE_ELIGIBLE)->whereIn('processing_status', [Rec::PENDING, Rec::QUEUED])->count(),
-                'created' => Rec::where('processing_status', Rec::SYNCED_CREATED)->count(),
-                'updated' => Rec::where('processing_status', Rec::SYNCED_UPDATED)->count(),
-                'held' => Rec::where('processing_status', Rec::HELD)->count(),
-                'skipped' => Rec::whereIn('processing_status', [Rec::SKIPPED])->count(),
-                'baseline' => Rec::where('processing_status', Rec::BASELINE_SKIPPED)->count(),
-                'failed' => Rec::where('processing_status', Rec::FAILED)->count(),
-                'failed_attempts' => SyncAttempt::where('status', 'failed')->count(),
+            'stats' => $this->overviewStats() + [
                 'last_discovery' => $lastRun?->finished_at?->toIso8601String(),
             ],
             'new_customers' => Rec::with('store')

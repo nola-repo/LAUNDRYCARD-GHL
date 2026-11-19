@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\BranchMapping;
+use App\Models\LaundrycardSourceRecord as Rec;
 use App\Models\User;
 use App\Services\BranchMappingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -130,6 +131,39 @@ class AdminDashboardTest extends TestCase
         $this->assertSame('connected', $response->json('connection_state'));
         $this->assertSame(1, $response->json('stats.mappings_verified'));
         \Illuminate\Support\Facades\Http::assertNothingSent();
+    }
+
+    public function test_overview_refresh_preserves_masked_rows_and_matches_the_monitoring_totals(): void
+    {
+        $url = route('admin.overview');
+        $this->getJson($url)->assertUnauthorized();
+        $this->actingAs(User::factory()->create())->getJson($url)->assertForbidden();
+        $this->actingAs($this->admin());
+        $empty = $this->getJson($url)->assertOk()->assertJsonPath('stats.records', 0);
+        $this->assertStringContainsString('data-key="empty"', $empty->json('parts.customers'));
+
+        $record = Rec::create([
+            'laundrycard_store_id' => $this->store()->id,
+            'card_number' => '42733398',
+            'classification' => Rec::NEW_OBSERVED,
+            'eligibility_status' => Rec::BALANCE_ELIGIBLE,
+            'processing_status' => Rec::PENDING,
+            'first_observed_at' => now(),
+            'last_observed_at' => now(),
+            'customer_email' => 'sample@example.test',
+            'balance' => 12.50,
+        ]);
+
+        $snapshot = $this->getJson($url)->assertOk()
+            ->assertJsonPath('stats.records', 1)->assertJsonPath('stats.eligible_pending', 1)
+            ->assertJsonPath('stats.unmapped', 1)->assertJsonPath('stats.mappings_verified', 0);
+        $rows = $snapshot->json('parts.customers');
+        $this->assertStringContainsString('data-key="'.$record->id.'"', $rows);
+        $this->assertStringContainsString('42••••98', $rows);
+        $this->assertStringNotContainsString('42733398', $rows);
+        $this->assertStringNotContainsString('sample@example.test', $rows);
+        $this->get($url)->assertOk()->assertSee(trim($rows), false);
+        $this->getJson(route('admin.monitoring.updates'))->assertJsonFragment($snapshot->json('stats'));
     }
 
     public function test_cron_endpoint_fails_closed_without_the_bearer_secret(): void
