@@ -10,6 +10,10 @@
   const signIn = find('#ov-sign-in');
   const filter = find('#customer-search-input');
   const clear = find('#ov-clear');
+  const dialog = find('#ov-detail-dialog');
+  const detailTitle = find('#ov-detail-title');
+  const detailSummary = find('#ov-detail-summary');
+  const detailContent = find('#ov-detail-content');
   const customers = find('#ov-customers');
   const count = find('#ov-result-count');
   const noMatch = find('#ov-no-match');
@@ -19,10 +23,53 @@
   });
   const parts = ['health', 'balances', 'customers', 'events', 'stores', 'runs'];
   const previousMarkup = new Map();
+  const hasDetails = dialog && typeof dialog.showModal === 'function';
   const interval = 4000;
   let paused = false;
   let timer;
   let activeRequest;
+  let lastDetailTrigger;
+  let lastDetailKey;
+  let lastDetailHeading;
+
+  if (hasDetails) {
+    page.querySelectorAll('[data-detail-open]').forEach(button => { button.hidden = false; });
+    page.addEventListener('click', event => {
+      const trigger = event.target.closest('[data-detail-open]');
+      if (trigger) {
+        const template = trigger.parentElement.querySelector('template.ov-detail-template');
+        if (!template) return;
+        lastDetailTrigger = trigger;
+        lastDetailKey = trigger.closest('[data-key]')?.dataset.key || null;
+        lastDetailHeading = trigger.closest('.ov-panel')?.querySelector('.ov-panel-heading h2') || null;
+        detailTitle.textContent = trigger.dataset.detailTitle || 'Details';
+        detailSummary.textContent = trigger.dataset.detailSummary || '';
+        detailContent.replaceChildren(template.content.cloneNode(true));
+        dialog.showModal();
+        return;
+      }
+      if (event.target.closest('[data-close-details]')) dialog.close();
+    });
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener('close', () => {
+      const row = lastDetailKey
+        ? Array.from(lastDetailHeading?.closest('.ov-panel')?.querySelectorAll('[data-key]') || [])
+          .find(item => item.dataset.key === lastDetailKey)
+        : null;
+      const restoreTarget = lastDetailTrigger?.isConnected
+        ? lastDetailTrigger
+        : row?.querySelector('[data-detail-open]') || lastDetailHeading;
+      if (restoreTarget) {
+        if (restoreTarget.matches('.ov-panel-heading h2')) restoreTarget.setAttribute('tabindex', '-1');
+        restoreTarget.focus({ preventScroll: true });
+      }
+      lastDetailTrigger = null;
+      lastDetailKey = null;
+      lastDetailHeading = null;
+    });
+  }
 
   function showState(state, label) {
     status.dataset.state = state;
@@ -80,16 +127,22 @@
       existing.delete(key);
       if (!node) {
         node = next;
+        if (hasDetails) node.querySelectorAll('[data-detail-open]').forEach(button => { button.hidden = false; });
         if (key !== 'empty') highlight(node);
       } else if (name === 'health') {
-        // Keep each disclosure, its open state and its focused summary in place.
-        for (const tag of ['summary', 'dl']) {
-          const current = node.querySelector(tag);
-          const updated = next.querySelector(tag);
-          if (current.innerHTML !== updated.innerHTML) current.replaceChildren(...updated.childNodes);
-        }
+        // Keep service cards and detail controls stable while their live values update.
+        const currentBadge = node.querySelector('.badge');
+        const nextBadge = next.querySelector('.badge');
+        currentBadge.className = nextBadge.className;
+        currentBadge.textContent = nextBadge.textContent;
+        node.querySelector('.ov-health-hint').textContent = next.querySelector('.ov-health-hint').textContent;
+        node.querySelector('.ov-detail-template').innerHTML = next.querySelector('.ov-detail-template').innerHTML;
       } else if (node.innerHTML !== next.innerHTML) {
+        const restoreDetailFocus = node.contains(document.activeElement)
+          && document.activeElement.matches('[data-detail-open]');
         node.replaceChildren(...next.childNodes);
+        if (hasDetails) node.querySelectorAll('[data-detail-open]').forEach(button => { button.hidden = false; });
+        if (restoreDetailFocus) node.querySelector('[data-detail-open]')?.focus({ preventScroll: true });
         if (key !== 'empty') highlight(node);
       }
       if (node !== position) parent.insertBefore(node, position);
@@ -202,7 +255,7 @@
   const links = Array.from(page.querySelectorAll('.ov-nav a'));
   const sections = links.map(link => document.getElementById(link.hash.slice(1)));
   function updateNavigation() {
-    const edge = window.matchMedia('(max-width: 900px)').matches ? 96 : 32;
+    const edge = find('.ov-nav').getBoundingClientRect().bottom + 20;
     let active = sections[0];
     for (const section of sections) {
       const top = section.getBoundingClientRect().top;
