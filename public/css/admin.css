@@ -279,62 +279,62 @@ hr {
   overflow: hidden;
 }
 
+/* ── Brand lockup keyframes (shared by sidebar + mobile topbar) ── */
+@keyframes lc-arrowY { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2.5px)} }
+@keyframes lc-arrowB { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+@keyframes lc-arrowG { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+@keyframes lc-blink  { 0%,90%,100%{transform:scaleY(1)} 95%{transform:scaleY(0.08)} }
+@keyframes lc-dotR   { 0%{transform:translateX(-18px);opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{transform:translateX(18px);opacity:0} }
+@keyframes lc-dotL   { 0%{transform:translateX(18px);opacity:0}  15%{opacity:1} 85%{opacity:1} 100%{transform:translateX(-18px);opacity:0} }
+@keyframes lc-float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
+
+.lc-ay    { animation: lc-arrowY 2.5s ease-in-out infinite 0s;    transform-origin: center bottom; }
+.lc-ab    { animation: lc-arrowB 2.5s ease-in-out infinite .2s;   transform-origin: center bottom; }
+.lc-ag    { animation: lc-arrowG 2.5s ease-in-out infinite .4s;   transform-origin: center bottom; }
+.lc-blink { animation: lc-blink  4s   ease-in-out infinite;       transform-origin: center; }
+.lc-dr1   { animation: lc-dotR   1.6s linear     infinite 0s; }
+.lc-dr2   { animation: lc-dotR   1.6s linear     infinite .53s; }
+.lc-dl1   { animation: lc-dotL   1.6s linear     infinite .2s; }
+.lc-dl2   { animation: lc-dotL   1.6s linear     infinite .73s; }
+.lc-float { animation: lc-float  3.4s ease-in-out infinite; }
+
 .side-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 18px 16px 14px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid #f1f5f9;
   flex-shrink: 0;
 }
 
+/* Brand block now contains the lockup SVG directly — no icon box or text spans */
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
   min-width: 0;
+  flex: 1;
 }
 
-.brand-icon {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  background: #4f46e5;
-  box-shadow: none;
+.brand-lockup-svg {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  display: block;
+  overflow: visible;
 }
 
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.25;
+/* Mobile topbar: slightly smaller lockup */
+.mobile-topbar .brand-lockup-svg {
+  max-width: 185px;
 }
 
-.brand-title {
-  font-weight: 700;
-  color: #0f172a;
-  font-size: 13.5px;
-  letter-spacing: -0.015em;
-  white-space: nowrap;
-}
-
-.brand-sep {
-  color: #4f46e5;
-  margin: 0 2px;
-}
-
-.brand-tag, .brand-subtitle {
-  font-size: 11px;
-  font-weight: 500;
-  color: #64748b;
-  margin-top: 1px;
-  white-space: nowrap;
-}
+/* Keep old classes harmless in case they appear elsewhere */
+.brand-icon  { display: none; }
+.brand-text  { display: none; }
+.brand-title { display: none; }
+.brand-sep   { display: none; }
+.brand-tag, .brand-subtitle { display: none; }
 
 .sidebar-collapse-btn {
   width: 28px;
@@ -557,7 +557,6 @@ hr {
 .side.collapsed {
   width: var(--sidebar-width-collapsed);
 }
-.side.collapsed .brand-text,
 .side.collapsed .nav-label,
 .side.collapsed .nav-section-label,
 .side.collapsed .who-info,
@@ -573,6 +572,13 @@ hr {
 }
 .side.collapsed .brand {
   justify-content: center;
+}
+/* In collapsed state: shrink SVG to show only the icon portion (first ~46px of viewBox) */
+.side.collapsed .brand-lockup-svg {
+  max-width: 36px;
+  /* Clip to just the icon section by overriding viewBox via CSS trick */
+  clip-path: inset(0 78% 0 0);
+  transform: translateX(-50%) scaleX(1);
 }
 .side.collapsed .nav {
   padding: 10px 8px;
