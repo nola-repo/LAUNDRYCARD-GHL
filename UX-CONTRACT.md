@@ -25,6 +25,7 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 |---|---|---|---|---|
 | Table selection | Not used on Overview | Overview Blade tables | Read-only rows | Keyboard and narrow viewport review |
 | Sign-in form | Laravel auth route/controller, login Blade, and `login.js` | Authentication behavior below | Responsive brand panel, inline field errors, password reveal | Keyboard and narrow viewport review |
+| OAuth installations | `admin.installations` Blade view and `HighLevelOAuthService` | OAuth connection lifecycle and encrypted `GhlConnection` fields | Responsive location cards with token, mapping, scope, and error details | Preserve connection actions; confirmation dialog for refresh-all |
 | Scrollbar | Shared admin palette plus Overview geometry | `admin.css`, `overview.css` | Rounded brand-colored thumbs on page, sidebar, and table regions; keyboard-accessible contained table scrolling | Computed style and keyboard scrolling |
 | Record details | One Overview read-only dialog | `overview.blade.php`, `overview.js` | Service card or table record content | Keyboard open, close, Escape, and focus return |
 | CRUD | Not used on Overview | Admin routes and sibling pages | Out of Overview scope | Sibling workflow evidence |
@@ -59,9 +60,16 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 ## Navigation and responsive behavior
 
 - Route titles use `{Page} · LaundryCard ⇄ GHL` through the shared app layout.
-- Desktop keeps the admin sidebar. Narrow layouts use the shared sticky mobile topbar and drawer.
+- Desktop keeps a fixed-width, always-expanded admin sidebar. Narrow layouts use the shared sticky mobile topbar and drawer.
 - At widths up to 1180px, Overview tables retain native table semantics but visually reflow each record into a labeled card. The ellipsis action sits in a reserved top-right slot and never occupies a narrow data column. At wider widths, aligned table columns remain visible with their existing scroll regions.
 - Section scroll offsets account for the sticky section rail and mobile topbar so headings remain visible after anchor navigation.
+
+## OAuth installations
+
+- Show each GoHighLevel connection as a responsive location card. Preserve its status, token expiry, refresh timestamps, API success, installed date, granted scopes, mapped store, recent errors, and the existing refresh, test, and reconnect actions.
+- Access and refresh tokens remain encrypted at rest and are never rendered. The connection cards show operational metadata only.
+- Refresh All Tokens opens an app-owned confirmation dialog before submitting the existing batch refresh action. Copy auth URL reports success or recovery guidance in an inline status region and never displays the raw state value.
+- A newly authorized location still requires an administrator to assign a LaundryCard branch before synchronization is enabled.
 
 ## Verification
 

@@ -254,7 +254,7 @@
   align-self: end;
   min-width: 0;
   color: white;
-  font: 800 clamp(2.5rem, 22cqi, 4.5rem)/1 var(--font-sans);
+  font: 800 clamp(2.15rem, 16cqi, 3.25rem)/1 var(--font-sans);
   font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: -.04em;
   overflow-wrap: anywhere;

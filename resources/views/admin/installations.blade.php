@@ -1,278 +1,330 @@
 @extends('layouts.app')
 @section('title','OAuth Installations')
+
+@push('styles')
+<link rel="stylesheet" href="{{ asset('css/installations.css') }}?v={{ filemtime(public_path('css/installations.css')) }}">
+@endpush
+
 @section('content')
+<div class="oauth-page">
+  @if(session('flash_success'))
+    <div class="notice ok oauth-flash" role="status">{{ session('flash_success') }}</div>
+  @endif
 
-@if(session('flash_success'))
-<div class="notice ok">{{ session('flash_success') }}</div>
-@endif
-@if(session('error'))
-<div class="notice err">{{ session('error') }}</div>
-@endif
-@if(session('result'))
-<div class="notice ok">
-  <strong>{{ session('result.title') }}</strong> — Location: {{ session('result.data.location') ?? 'Verified' }} (HTTP {{ session('result.data.http_status') ?? 200 }})
-</div>
-@endif
+  @php
+    $totalConns = $connections->count();
+    $activeConns = $connections->where('status', 'active')->count();
+    $mappedConns = $connections->filter(fn($c) => $c->activeMapping !== null)->count();
+    $unmappedConns = $totalConns - $mappedConns;
+  @endphp
 
-<div class="page-head">
-  <div>
-    <span class="page-kicker">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-      OAuth 2.0 Security
-    </span>
-    <h1>OAuth Installations</h1>
-    <p class="sub">Location-scoped GoHighLevel connections registered through OAuth. Access and refresh tokens are encrypted at rest and never displayed.</p>
-  </div>
-  <div class="btn-row">
-    <form method="post" action="{{ route('admin.connections.refresh-all') }}" style="display:inline">
-      @csrf
-      <button type="submit" class="btn" title="Force proactive token rotation across all connected sub-accounts" onclick="return confirm('Refresh access tokens for all active sub-accounts now?')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        <span>Refresh All Tokens</span>
-      </button>
-    </form>
-    <a href="{{ route('admin.connect') }}" class="btn primary">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-      <span>Connect location</span>
-    </a>
-    <a href="{{ route('admin.oauth.diagnose') }}" class="btn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
-      <span>Diagnostics</span>
-    </a>
-    <button type="button" onclick="copyAuthUrl()" class="btn" title="Fetch and copy the authorization URL (state redacted) for inspection">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-      <span>Copy auth URL</span>
-    </button>
-  </div>
-</div>
-
-@php
-  $totalConns = $connections->count();
-  $activeConns = $connections->where('status', 'active')->count();
-  $mappedConns = $connections->filter(fn($c) => $c->activeMapping !== null)->count();
-  $unmappedConns = $totalConns - $mappedConns;
-@endphp
-
-<div class="metric-row">
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">Registered Locations</span>
-      <div class="metric-icon metric-icon--violet">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+  <header class="oauth-hero">
+    <div class="oauth-hero-top">
+      <div class="oauth-hero-copy">
+        <p class="oauth-eyebrow"><span aria-hidden="true"></span> Connection management · OAuth 2.0</p>
+        <h1>OAuth installations</h1>
+        <p>Manage GoHighLevel access, token health, and store routing.</p>
       </div>
     </div>
-    <div class="metric-num">{{ $totalConns }}</div>
-    <div class="metric-sub">Total OAuth handshakes stored</div>
-  </div>
 
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">Active Sessions</span>
-      <div class="metric-icon metric-icon--emerald">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+    <div class="oauth-hero-bottom">
+      <div class="oauth-actions" role="group" aria-label="OAuth installation actions">
+        <button type="button" class="btn oauth-btn oauth-btn-secondary" data-open-refresh-dialog>
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M5.6 9A7 7 0 0 1 17 6l3 6M4 12l3 6a7 7 0 0 0 11.4-3"></path></svg>
+          <span>Refresh all tokens</span>
+        </button>
+        <a href="{{ route('admin.oauth.diagnose') }}" class="btn oauth-btn oauth-btn-secondary">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+          <span>Diagnostics</span>
+        </a>
+        <button type="button" class="btn oauth-btn oauth-btn-secondary" id="copy-auth-url">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>Copy auth URL</span>
+        </button>
+        <a href="{{ route('admin.connect') }}" class="btn primary oauth-btn oauth-btn-primary oauth-connect">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+          <span>Connect location</span>
+        </a>
       </div>
+      <p class="oauth-security-note">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="18" height="11" rx="2"></rect><path d="M7 10V7a5 5 0 0 1 10 0v3"></path></svg>
+        <span>Tokens are encrypted at rest and never displayed.</span>
+      </p>
     </div>
-    <div class="metric-num" style="color:var(--ok-light)">{{ $activeConns }}</div>
-    <div class="metric-sub">Auto-rotating token lifecycle</div>
-  </div>
+  </header>
 
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">Routed to Store</span>
-      <div class="metric-icon metric-icon--cyan">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M18 6v6a6 6 0 0 1-6 6H6"></path></svg>
+  <div class="oauth-copy-status" id="oauth-copy-status" role="status" aria-live="polite" hidden></div>
+
+  <section class="oauth-summary" aria-label="OAuth installation summary">
+    <article class="oauth-stat">
+      <span class="oauth-stat-icon oauth-stat-icon--brand" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path><path d="m9 12 2 2 4-4"></path></svg>
+      </span>
+      <div><span class="oauth-stat-label">Locations</span><strong>{{ number_format($totalConns) }}</strong></div>
+    </article>
+    <article class="oauth-stat">
+      <span class="oauth-stat-icon oauth-stat-icon--green" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="m9 11 3 3L22 4"></path></svg>
+      </span>
+      <div><span class="oauth-stat-label">Active</span><strong>{{ number_format($activeConns) }}</strong></div>
+    </article>
+    <article class="oauth-stat">
+      <span class="oauth-stat-icon oauth-stat-icon--blue" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9v3a6 6 0 0 1-6 6H9"></path></svg>
+      </span>
+      <div><span class="oauth-stat-label">Routed</span><strong>{{ number_format($mappedConns) }}</strong></div>
+    </article>
+    <article class="oauth-stat">
+      <span class="oauth-stat-icon oauth-stat-icon--orange" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4m0 4h.01"></path></svg>
+      </span>
+      <div><span class="oauth-stat-label">Unassigned</span><strong>{{ number_format($unmappedConns) }}</strong></div>
+    </article>
+  </section>
+
+  <section class="oauth-section" aria-labelledby="oauth-connections-heading">
+    <div class="oauth-section-head">
+      <div>
+        <p class="oauth-section-kicker">Access &amp; routing</p>
+        <h2 id="oauth-connections-heading">Connected locations</h2>
+        <p>Review token status and branch assignments for each GoHighLevel location.</p>
       </div>
+      <span class="oauth-count">{{ $totalConns }} {{ \Illuminate\Support\Str::plural('location', $totalConns) }}</span>
     </div>
-    <div class="metric-num">{{ $mappedConns }}</div>
-    <div class="metric-sub">Linked to a LaundryCard branch</div>
-  </div>
 
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">Unassigned</span>
-      <div class="metric-icon metric-icon--amber">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-      </div>
-    </div>
-    <div class="metric-num">{{ $unmappedConns }}</div>
-    <div class="metric-sub">Awaiting store pair resolution</div>
-  </div>
-</div>
-
-<div class="table-card">
-  <div class="table-card-header">
-    <div>
-      <h2>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-        Connected Sub-Accounts
-      </h2>
-      <span class="muted" style="font-size:12px">Encrypted OAuth credentials and token rotation telemetry per GoHighLevel location</span>
-    </div>
-    <span class="badge b-ok"><span class="dot ok"></span> AES-256 Encrypted</span>
-  </div>
-
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Location ID</th>
-          <th>Sub-Account Name</th>
-          <th>Status</th>
-          <th>Token Health &amp; Expiry</th>
-          <th>Last Refreshed</th>
-          <th>Granted Scopes</th>
-          <th>Installed</th>
-          <th>Last API Success</th>
-          <th>Recent Errors</th>
-          <th>Mapped Store</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        @forelse($connections as $c)
-        <tr>
-          <td class="nowrap"><span class="card-mono">{{ $c->location_id }}</span></td>
-          <td style="font-weight:700;color:var(--text-title);min-width:170px">{{ $c->location_name ?? '—' }}</td>
-          <td class="nowrap">
-            <x-badge :value="$c->status"/>
-          </td>
-          <td class="nowrap">
-            <x-badge :value="$c->tokenExpiryState()"/>
-            <div class="muted" style="font-size:11px;margin-top:3px" title="{{ $c->expires_at?->format('Y-m-d H:i:s') }} UTC">
-              Expires: {{ $c->expires_at?->diffForHumans() ?? '—' }}
+    <div class="oauth-connection-grid">
+      @forelse($connections as $c)
+        @php($expiryState = $c->tokenExpiryState())
+        <article class="oauth-connection-card">
+          <div class="oauth-connection-head">
+            <span class="oauth-location-mark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V7l8-4v18"></path><path d="M19 21V11l-6-4"></path><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01M16 13v.01M16 16v.01M16 19v.01"></path></svg>
+            </span>
+            <div class="oauth-location-copy">
+              <span class="oauth-overline">GoHighLevel location</span>
+              <h3>{{ $c->location_name ?? 'Unnamed location' }}</h3>
+              <span class="oauth-location-id">Location ID <code>{{ $c->location_id }}</code></span>
             </div>
-            @if($c->expires_at)
-              <div class="muted mono" style="font-size:10px">{{ $c->expires_at->format('M d, H:i') }} UTC</div>
-            @endif
-          </td>
-          <td class="nowrap">
-            @if($c->last_refreshed_at)
-              <span style="font-size:12px;font-weight:600;color:var(--text-title)">{{ $c->last_refreshed_at->diffForHumans() }}</span>
-              <div class="muted mono" style="font-size:10px">{{ $c->last_refreshed_at->format('M d, H:i') }} UTC</div>
+            <x-badge :value="$c->status" />
+          </div>
+
+          <div class="oauth-token-row">
+            <div class="oauth-token-state">
+              <span class="oauth-detail-label">Token health</span>
+              <x-badge :value="$expiryState" />
+            </div>
+            <div class="oauth-token-expiry">
+              <span class="oauth-detail-label">Expires</span>
+              <strong title="{{ $c->expires_at?->format('Y-m-d H:i:s') }} UTC">{{ $c->expires_at?->diffForHumans() ?? 'Not available' }}</strong>
+              @if($c->expires_at)
+                <small>{{ $c->expires_at->format('M d, H:i') }} UTC</small>
+              @endif
+            </div>
+          </div>
+
+          <dl class="oauth-detail-grid">
+            <div>
+              <dt>Last refreshed</dt>
+              <dd>
+                @if($c->last_refreshed_at)
+                  {{ $c->last_refreshed_at->diffForHumans() }}
+                  <small>{{ $c->last_refreshed_at->format('M d, H:i') }} UTC</small>
+                @else
+                  Never
+                @endif
+              </dd>
+            </div>
+            <div>
+              <dt>Last API success</dt>
+              <dd>{{ $c->last_success_at?->diffForHumans() ?? 'Never' }}</dd>
+            </div>
+            <div>
+              <dt>Installed</dt>
+              <dd>{{ $c->installed_at?->toDateString() ?? '—' }}</dd>
+            </div>
+            <div>
+              <dt>Mapped store</dt>
+              <dd>
+                @if($c->activeMapping)
+                  <span class="store-id-pill">Store {{ $c->activeMapping->store->store_id }}</span>
+                  <small>{{ $c->activeMapping->store->name }}</small>
+                @else
+                  <span class="oauth-unassigned">Unassigned</span>
+                @endif
+              </dd>
+            </div>
+          </dl>
+
+          <div class="oauth-card-section">
+            <h4>Granted scopes</h4>
+            @if($c->scopes)
+              <div class="oauth-scope-list">
+                @foreach($c->scopes as $scope)
+                  <span class="tag-chip">{{ $scope }}</span>
+                @endforeach
+              </div>
             @else
-              <span class="muted" style="font-size:12px">Never</span>
+              <p class="oauth-empty-copy">No scopes recorded.</p>
             @endif
-          </td>
-          <td style="min-width:180px">
-            <div class="tag-row" style="margin-top:0">
-              @foreach($c->scopes ?? [] as $scope)
-                <span class="tag-chip">{{ $scope }}</span>
-              @endforeach
-            </div>
-          </td>
-          <td class="muted nowrap">{{ $c->installed_at?->toDateString() ?? '—' }}</td>
-          <td class="nowrap">{{ $c->last_success_at?->diffForHumans() ?? 'never' }}</td>
-          <td style="max-width:200px">
+          </div>
+
+          <div class="oauth-card-section oauth-errors">
+            <h4>Recent errors</h4>
             @if($c->last_error)
-              <div class="err-txt" style="margin:0">{{ $c->last_error }}</div>
+              <p class="err-txt">{{ $c->last_error }}</p>
             @endif
             @foreach($c->recent_errors as $e)
-              <div class="muted" style="font-size:11px">{{ $e->created_at->diffForHumans() }}: {{ \Illuminate\Support\Str::limit($e->message,70) }}</div>
+              <p class="oauth-error-entry"><time datetime="{{ $e->created_at->toIso8601String() }}">{{ $e->created_at->diffForHumans() }}</time> · {{ \Illuminate\Support\Str::limit($e->message, 90) }}</p>
             @endforeach
-            @if(!$c->last_error && (!isset($c->recent_errors) || count($c->recent_errors) === 0))
-              <span class="muted" style="font-size:12px">None</span>
+            @if(!$c->last_error && count($c->recent_errors) === 0)
+              <p class="oauth-empty-copy">No recent OAuth errors.</p>
             @endif
-          </td>
-          <td class="nowrap">
-            @if($c->activeMapping)
-              <span class="store-id-pill">Store {{ $c->activeMapping->store->store_id }}</span>
-              <div class="muted" style="font-size:11.5px;margin-top:3px">{{ $c->activeMapping->store->name }}</div>
-            @else
-              <x-badge value="unmapped"/>
-            @endif
-          </td>
-          <td class="nowrap">
-            @if($c->status === 'revoked' || $c->tokenExpiryState() === 'expired')
-              <a href="{{ route('admin.connect') }}" class="btn sm primary" style="padding:4px 10px;font-size:11px">Reconnect OAuth</a>
-            @else
-              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                <form method="post" action="{{ route('admin.connections.refresh', $c) }}" style="display:inline">
-                  @csrf
-                  <button type="submit" class="btn sm" style="padding:3px 8px;font-size:11px" title="Proactively rotate access token and refresh token now">
-                    ↻ Refresh
-                  </button>
-                </form>
-                <form method="post" action="{{ route('admin.connections.test', $c) }}" style="display:inline">
-                  @csrf
-                  <button type="submit" class="btn sm" style="padding:3px 8px;font-size:11px" title="Test GHL API connectivity">
-                    Test
-                  </button>
-                </form>
-              </div>
-            @endif
-          </td>
-        </tr>
-        @empty
-        <tr>
-          <td colspan="11">
-            <div class="empty-state-box">
-              <div class="empty-state-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-              </div>
-              <div class="empty-state-text">No GHL location has authorized the app yet.</div>
-              <p class="muted" style="font-size:12.5px;margin-top:4px">Use the Connect location button above to initiate the OAuth handshake.</p>
-            </div>
-          </td>
-        </tr>
-        @endforelse
-      </tbody>
-    </table>
-  </div>
-</div>
+          </div>
 
-@if(isset($recentOauthEvents) && $recentOauthEvents->isNotEmpty())
-<div class="table-card" style="margin-top:24px">
-  <div class="table-card-header">
-    <div>
-      <h2>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-        Recent OAuth Lifecycle &amp; Token Rotation Log
-      </h2>
-      <span class="muted" style="font-size:12px">Telemetry tracking automatic proactive refresh cycles and token rotations across all sub-accounts</span>
+          <div class="oauth-card-actions">
+            @if($c->status === 'revoked' || $expiryState === 'expired')
+              <a href="{{ route('admin.connect') }}" class="btn sm primary">Reconnect OAuth</a>
+            @else
+              <form method="post" action="{{ route('admin.connections.refresh', $c) }}">
+                @csrf
+                <button type="submit" class="btn sm" title="Proactively rotate this location's access token">
+                  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M5.6 9A7 7 0 0 1 17 6l3 6M4 12l3 6a7 7 0 0 0 11.4-3"></path></svg>
+                  Refresh token
+                </button>
+              </form>
+              <form method="post" action="{{ route('admin.connections.test', $c) }}">
+                @csrf
+                <button type="submit" class="btn sm">Test connection</button>
+              </form>
+            @endif
+          </div>
+        </article>
+      @empty
+        <div class="oauth-empty-state">
+          <span class="oauth-empty-icon" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path><path d="m9 12 2 2 4-4"></path></svg>
+          </span>
+          <h3>No locations connected yet</h3>
+          <p>Connect a GoHighLevel location to begin the OAuth handshake. Assign a LaundryCard branch before contact synchronization can run.</p>
+          <a href="{{ route('admin.connect') }}" class="btn primary oauth-btn oauth-btn-primary">Connect location</a>
+        </div>
+      @endforelse
     </div>
-    <span class="badge b-info">Live Rotation Trail</span>
-  </div>
+  </section>
 
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Time (UTC)</th>
-          <th>Location ID</th>
-          <th>Stage</th>
-          <th>Outcome</th>
-          <th>Message</th>
-        </tr>
-      </thead>
-      <tbody>
-        @foreach($recentOauthEvents as $ev)
-        <tr>
-          <td class="nowrap" style="font-size:12px;color:var(--text-title);font-weight:600">{{ $ev->created_at->format('M d, Y H:i:s') }}</td>
-          <td class="nowrap"><span class="card-mono">{{ $ev->ghl_location_id ?? 'Global' }}</span></td>
-          <td class="nowrap"><span class="mono" style="font-size:11px">{{ $ev->stage }}</span></td>
-          <td class="nowrap"><x-badge :value="$ev->outcome"/></td>
-          <td style="font-size:12px">{{ $ev->message }}</td>
-        </tr>
-        @endforeach
-      </tbody>
-    </table>
-  </div>
+  @if($recentOauthEvents->isNotEmpty())
+    <section class="oauth-events" aria-labelledby="oauth-events-heading">
+      <div class="oauth-section-head">
+        <div>
+          <p class="oauth-section-kicker">Token lifecycle</p>
+          <h2 id="oauth-events-heading">Recent OAuth activity</h2>
+          <p>Installation, state validation, and token rotation events.</p>
+        </div>
+        <a href="{{ route('admin.logs') }}?stage=oauth" class="btn sm oauth-events-link">View OAuth logs</a>
+      </div>
+
+      <div class="table-card oauth-event-card">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Time (UTC)</th>
+                <th>Location ID</th>
+                <th>Stage</th>
+                <th>Outcome</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              @foreach($recentOauthEvents as $ev)
+                <tr>
+                  <td class="nowrap oauth-event-time">{{ $ev->created_at->format('M d, Y H:i:s') }}</td>
+                  <td class="nowrap"><span class="card-mono">{{ $ev->ghl_location_id ?? 'Global' }}</span></td>
+                  <td class="nowrap"><span class="mono oauth-event-stage">{{ $ev->stage }}</span></td>
+                  <td class="nowrap"><x-badge :value="$ev->outcome" /></td>
+                  <td class="oauth-event-message">{{ $ev->message }}</td>
+                </tr>
+              @endforeach
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  @endif
+
+  <dialog class="oauth-confirm-dialog" id="refresh-all-dialog" aria-labelledby="refresh-all-title" aria-describedby="refresh-all-description">
+    <form method="post" action="{{ route('admin.connections.refresh-all') }}">
+      @csrf
+      <div class="oauth-dialog-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M5.6 9A7 7 0 0 1 17 6l3 6M4 12l3 6a7 7 0 0 0 11.4-3"></path></svg>
+      </div>
+      <h2 id="refresh-all-title">Refresh all active tokens?</h2>
+      <p id="refresh-all-description">This sends a token refresh request for each of the {{ $activeConns }} active {{ \Illuminate\Support\Str::plural('location', $activeConns) }}. The next page reports which refreshes succeeded, were skipped, or failed.</p>
+      <div class="oauth-dialog-actions">
+        <button type="button" class="btn oauth-btn oauth-btn-secondary" data-close-refresh-dialog autofocus>Cancel</button>
+        <button type="submit" class="btn primary oauth-btn oauth-btn-primary"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M5.6 9A7 7 0 0 1 17 6l3 6M4 12l3 6a7 7 0 0 0 11.4-3"></path></svg>Refresh all tokens</button>
+      </div>
+    </form>
+  </dialog>
 </div>
-@endif
 
 <script>
-function copyAuthUrl() {
-  fetch('{{ route('oauth.auth-url') }}')
-    .then(r => r.json())
-    .then(data => {
-      if (data.error) { alert('Error: ' + data.error); return; }
-      navigator.clipboard.writeText(data.url).then(() => {
-        alert('Auth URL copied to clipboard.\n\nRedacted preview:\n' + data.redacted);
-      }).catch(() => {
-        prompt('Copy this URL:', data.url);
-      });
-    })
-    .catch(e => alert('Failed to fetch auth URL: ' + e));
-}
+(() => {
+  const dialog = document.getElementById('refresh-all-dialog');
+  const openDialogButton = document.querySelector('[data-open-refresh-dialog]');
+  const closeDialogButton = document.querySelector('[data-close-refresh-dialog]');
+  const refreshForm = dialog?.querySelector('form');
+  const copyButton = document.getElementById('copy-auth-url');
+  const copyStatus = document.getElementById('oauth-copy-status');
+
+  if (dialog && openDialogButton && closeDialogButton) {
+    openDialogButton.addEventListener('click', () => {
+      dialog.showModal();
+      closeDialogButton.focus();
+    });
+    closeDialogButton.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog) dialog.close();
+    });
+    refreshForm?.addEventListener('submit', event => {
+      if (refreshForm.dataset.submitting === 'true') {
+        event.preventDefault();
+        return;
+      }
+      refreshForm.dataset.submitting = 'true';
+      const submitButton = refreshForm.querySelector('[type="submit"]');
+      submitButton.disabled = true;
+      submitButton.setAttribute('aria-busy', 'true');
+    });
+  }
+
+  if (copyButton && copyStatus) {
+    copyButton.addEventListener('click', async () => {
+      copyButton.disabled = true;
+      copyButton.setAttribute('aria-busy', 'true');
+      copyStatus.hidden = true;
+      copyStatus.removeAttribute('data-tone');
+
+      try {
+        const response = await fetch('{{ route('oauth.auth-url') }}', {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+        const data = await response.json();
+        if (!response.ok || data.error || !data.url) throw new Error('auth-url');
+        await navigator.clipboard.writeText(data.url);
+        copyStatus.textContent = 'Authorization URL copied to clipboard. It contains a temporary state value.';
+        copyStatus.dataset.tone = 'success';
+      } catch {
+        copyStatus.textContent = 'Could not copy the authorization URL. Check OAuth setup in Diagnostics and allow clipboard access.';
+        copyStatus.dataset.tone = 'error';
+      } finally {
+        copyStatus.hidden = false;
+        copyButton.disabled = false;
+        copyButton.removeAttribute('aria-busy');
+      }
+    });
+  }
+})();
 </script>
 @endsection

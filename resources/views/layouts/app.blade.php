@@ -124,21 +124,16 @@
       <div class="brand">
         <x-brand-lockup id-prefix="sidebar" />
       </div>
-      <button id="sidebar-collapse-toggle" class="sidebar-collapse-btn" title="Toggle sidebar width" aria-label="Collapse sidebar">
-        <svg class="collapse-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"></polyline>
-        </svg>
-      </button>
     </div>
 
     @php
       $failedCount = \App\Models\LaundrycardSourceRecord::whereIn('processing_status',['failed'])->count();
     @endphp
 
-    <nav class="nav">
+    <nav class="nav" aria-label="Primary navigation">
       <div class="nav-section-label">Core Platform</div>
       
-      <a id="nav-overview" href="{{ route('admin.overview') }}" class="nav-link {{ request()->routeIs('admin.overview') ? 'on':'' }}" data-tooltip="Overview">
+      <a id="nav-overview" href="{{ route('admin.overview') }}" class="nav-link {{ request()->routeIs('admin.overview') ? 'on':'' }}">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="9" rx="1.5"></rect>
@@ -150,7 +145,7 @@
         <span class="nav-label">Overview</span>
       </a>
 
-      <a id="nav-installations" href="{{ route('admin.installations') }}" class="nav-link {{ request()->routeIs('admin.installations') ? 'on':'' }}" data-tooltip="OAuth Installations">
+      <a id="nav-installations" href="{{ route('admin.installations') }}" class="nav-link {{ request()->routeIs('admin.installations') ? 'on':'' }}">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
@@ -160,7 +155,7 @@
         <span class="nav-label">OAuth Installations</span>
       </a>
 
-      <a id="nav-mappings" href="{{ route('admin.mappings') }}" class="nav-link {{ request()->routeIs('admin.mappings') ? 'on':'' }}" data-tooltip="Branch Mapping">
+      <a id="nav-mappings" href="{{ route('admin.mappings') }}" class="nav-link {{ request()->routeIs('admin.mappings') ? 'on':'' }}">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="18" cy="18" r="3"></circle>
@@ -173,7 +168,7 @@
 
       <div class="nav-section-label">Data Pipeline</div>
 
-      <a id="nav-records" href="{{ route('admin.records') }}" class="nav-link {{ request()->routeIs('admin.records') ? 'on':'' }}" data-tooltip="Customer Records">
+      <a id="nav-records" href="{{ route('admin.records') }}" class="nav-link {{ request()->routeIs('admin.records') ? 'on':'' }}">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
@@ -185,14 +180,14 @@
         <span class="nav-label">Customer Records</span>
       </a>
 
-      <a id="nav-transactions" href="{{ route('admin.transactions') }}" class="nav-link {{ request()->routeIs('admin.transactions') ? 'on':'' }}" data-tooltip="Credit History">
+      <a id="nav-transactions" href="{{ route('admin.transactions') }}" class="nav-link {{ request()->routeIs('admin.transactions') ? 'on':'' }}">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
         </span>
         <span class="nav-label">Credit History</span>
       </a>
 
-      <a id="nav-logs" href="{{ route('admin.logs') }}" class="nav-link {{ request()->routeIs('admin.logs') ? 'on':'' }}" data-tooltip="Integration Logs">
+      <a id="nav-logs" href="{{ route('admin.logs') }}" class="nav-link {{ request()->routeIs('admin.logs') ? 'on':'' }}">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="4 17 10 11 4 5"></polyline>
@@ -204,7 +199,7 @@
 
       <div class="nav-section-label">Reliability & API</div>
 
-      <a id="nav-failed" href="{{ route('admin.failed') }}" class="nav-link {{ request()->routeIs('admin.failed') ? 'on':'' }}" data-tooltip="Failed Activity">
+      <a id="nav-failed" href="{{ route('admin.failed') }}" class="nav-link {{ request()->routeIs('admin.failed') ? 'on':'' }}">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
@@ -218,7 +213,7 @@
         @endif
       </a>
 
-      <a id="nav-developer" href="{{ route('admin.developer') }}" class="nav-link {{ request()->routeIs('admin.developer') ? 'on':'' }}" data-tooltip="API Activity">
+      <a id="nav-developer" href="{{ route('admin.developer') }}" class="nav-link {{ request()->routeIs('admin.developer') ? 'on':'' }}">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="16 18 22 12 16 6"></polyline>
@@ -310,27 +305,11 @@
 </div>
 
 <script>
-// Sidebar Toggle & Mobile Drawer Handling
+// Mobile navigation drawer handling
 (() => {
   const sidebar = document.getElementById('app-sidebar');
   const overlay = document.getElementById('sidebar-overlay');
-  const collapseToggle = document.getElementById('sidebar-collapse-toggle');
   const mobileToggle = document.getElementById('mobile-menu-toggle');
-
-  if (collapseToggle && sidebar) {
-    const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-    if (isCollapsed) {
-      sidebar.classList.add('collapsed');
-      document.body.classList.add('sidebar-is-collapsed');
-    }
-
-    collapseToggle.addEventListener('click', () => {
-      sidebar.classList.toggle('collapsed');
-      const collapsed = sidebar.classList.contains('collapsed');
-      document.body.classList.toggle('sidebar-is-collapsed', collapsed);
-      localStorage.setItem('sidebar_collapsed', collapsed ? 'true' : 'false');
-    });
-  }
 
   if (mobileToggle && sidebar && overlay) {
     const toggleMobileMenu = (forceOpen) => {
