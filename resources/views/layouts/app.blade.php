@@ -107,7 +107,7 @@
       </text>
     </svg>
   </div>
-  <button id="mobile-menu-toggle" class="mobile-menu-btn" aria-label="Toggle navigation">
+  <button id="mobile-menu-toggle" class="mobile-menu-btn" aria-label="Open navigation menu" aria-controls="app-sidebar" aria-expanded="false">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="3" y1="12" x2="21" y2="12"></line>
       <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -122,73 +122,7 @@
   <aside id="app-sidebar" class="side">
     <div class="side-header">
       <div class="brand">
-        <!-- Brand lockup SVG — card mascot + animated transfer arrows + GHL wordmark -->
-        <svg class="brand-lockup-svg" viewBox="0 0 320 48" xmlns="http://www.w3.org/2000/svg" aria-label="LaundryCard ⇄ GHL Integration Suite">
-          <defs>
-            <linearGradient id="sb-gRed" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#FF4060"/><stop offset="100%" stop-color="#C11028"/></linearGradient>
-            <linearGradient id="sb-gY" x1="0%" y1="100%" x2="0%" y2="0%"><stop offset="0%" stop-color="#C57B00"/><stop offset="100%" stop-color="#FCD34D"/></linearGradient>
-            <linearGradient id="sb-gB" x1="0%" y1="100%" x2="0%" y2="0%"><stop offset="0%" stop-color="#1565C0"/><stop offset="100%" stop-color="#64B5F6"/></linearGradient>
-            <linearGradient id="sb-gG" x1="0%" y1="100%" x2="0%" y2="0%"><stop offset="0%" stop-color="#047857"/><stop offset="100%" stop-color="#34D399"/></linearGradient>
-            <linearGradient id="sb-arrR" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E21B41" stop-opacity="0"/><stop offset="50%" stop-color="#E21B41"/><stop offset="100%" stop-color="#FF5070"/></linearGradient>
-            <linearGradient id="sb-arrL" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#E21B41" stop-opacity="0"/><stop offset="50%" stop-color="#E21B41"/><stop offset="100%" stop-color="#FF5070"/></linearGradient>
-            <filter id="sb-cs"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity=".45"/></filter>
-            <filter id="sb-as"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity=".3"/></filter>
-            <clipPath id="sb-clip"><rect x="175" y="12" width="40" height="26"/></clipPath>
-          </defs>
-
-          <!-- GHL arrows (behind card) -->
-          <g class="lc-ay" filter="url(#sb-as)">
-            <rect x="6" y="21" width="7" height="13" rx="1" fill="url(#sb-gY)"/>
-            <polygon points="9.5,8 3,21 16,21" fill="url(#sb-gY)"/>
-            <polygon points="9.5,8 16,21 13,21 13,34 10,34" fill="#000" opacity=".1"/>
-          </g>
-          <g class="lc-ab" filter="url(#sb-as)">
-            <rect x="17" y="14" width="8" height="20" rx="1" fill="url(#sb-gB)"/>
-            <polygon points="21,2 13,14 29,14" fill="url(#sb-gB)"/>
-            <polygon points="21,2 29,14 25,14 25,34 21,34" fill="#000" opacity=".1"/>
-          </g>
-          <g class="lc-ag" filter="url(#sb-as)">
-            <rect x="29" y="10" width="7" height="24" rx="1" fill="url(#sb-gG)"/>
-            <polygon points="32.5,-2 25,10 40,10" fill="url(#sb-gG)"/>
-            <polygon points="32.5,-2 40,10 36,10 36,34 32.5,34" fill="#000" opacity=".1"/>
-          </g>
-          <!-- Card body -->
-          <g class="lc-float" filter="url(#sb-cs)">
-            <rect x="3" y="22" width="39" height="24" rx="6" fill="url(#sb-gRed)" stroke="#8B0A1E" stroke-width="1.5"/>
-            <path d="M5 24 L37 24 Q41 24 41 29 L41 31 Q24 30 5 36 Z" fill="#FFF" opacity=".14"/>
-            <rect x="6" y="29" width="9" height="7" rx="2" fill="#FCD34D" stroke="#B45309" stroke-width="1"/>
-            <line x1="10.5" y1="29" x2="10.5" y2="36" stroke="#92400E" stroke-width=".8"/>
-            <line x1="6" y1="32.5" x2="15" y2="32.5" stroke="#92400E" stroke-width=".8"/>
-            <g class="lc-blink" transform="translate(26,32)"><ellipse cx="0" cy="0" rx="2" ry="2.5" fill="#1E293B"/><circle cx=".7" cy="-.8" r=".8" fill="#FFF"/></g>
-            <g class="lc-blink" transform="translate(34,32)"><ellipse cx="0" cy="0" rx="2" ry="2.5" fill="#1E293B"/><circle cx=".7" cy="-.8" r=".8" fill="#FFF"/></g>
-            <circle cx="20" cy="36" r="2" fill="#FFA3B0" opacity=".6"/>
-            <circle cx="38" cy="36" r="2" fill="#FFA3B0" opacity=".6"/>
-            <path d="M 27 38 Q 30 42 33 38" stroke="#1E293B" stroke-width="1.4" stroke-linecap="round" fill="none"/>
-          </g>
-
-          <!-- Wordmark: LaundryCard -->
-          <text x="50" y="27" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-weight="900" font-size="17" letter-spacing="-.3">
-            <tspan fill="#E21B41">Laundry</tspan><tspan fill="#0f172a">Card</tspan>
-          </text>
-          <text x="50" y="40" font-family="system-ui,-apple-system,sans-serif" font-weight="600" font-size="8" letter-spacing="2.5" fill="#64748b">INTEGRATION SUITE</text>
-
-          <!-- Transfer bridge -->
-          <rect x="176" y="17" width="30" height="2.5" rx="1.25" fill="url(#sb-arrR)"/>
-          <polygon points="208,18.25 202,13.5 202,23" fill="#FF5070"/>
-          <rect x="178" y="26" width="30" height="2.5" rx="1.25" fill="url(#sb-arrL)"/>
-          <polygon points="176,27.25 182,22.5 182,32" fill="#FF5070"/>
-          <g clip-path="url(#sb-clip)">
-            <circle class="lc-dr1" cx="193" cy="18.25" r="1.5" fill="#FFF" opacity=".9"/>
-            <circle class="lc-dr2" cx="193" cy="18.25" r="1.5" fill="#FFF" opacity=".9"/>
-            <circle class="lc-dl1" cx="193" cy="27.25" r="1.5" fill="#FFF" opacity=".9"/>
-            <circle class="lc-dl2" cx="193" cy="27.25" r="1.5" fill="#FFF" opacity=".9"/>
-          </g>
-
-          <!-- GHL wordmark -->
-          <text x="216" y="27" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-weight="900" font-size="17" letter-spacing="-.3">
-            <tspan fill="#F5A623">G</tspan><tspan fill="#1E88E5">H</tspan><tspan fill="#10B981">L</tspan>
-          </text>
-        </svg>
+        <x-brand-lockup id-prefix="sidebar" />
       </div>
       <button id="sidebar-collapse-toggle" class="sidebar-collapse-btn" title="Toggle sidebar width" aria-label="Collapse sidebar">
         <svg class="collapse-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -399,15 +333,20 @@
   }
 
   if (mobileToggle && sidebar && overlay) {
-    const toggleMobileMenu = () => {
-      sidebar.classList.toggle('mobile-open');
-      overlay.classList.toggle('active');
+    const toggleMobileMenu = (forceOpen) => {
+      const open = typeof forceOpen === 'boolean' ? forceOpen : !sidebar.classList.contains('mobile-open');
+      sidebar.classList.toggle('mobile-open', open);
+      overlay.classList.toggle('active', open);
+      mobileToggle.setAttribute('aria-expanded', String(open));
+      mobileToggle.setAttribute('aria-label', open ? 'Close navigation menu' : 'Open navigation menu');
     };
 
     mobileToggle.addEventListener('click', toggleMobileMenu);
     overlay.addEventListener('click', () => {
-      sidebar.classList.remove('mobile-open');
-      overlay.classList.remove('active');
+      toggleMobileMenu(false);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && sidebar.classList.contains('mobile-open')) toggleMobileMenu(false);
     });
   }
 })();

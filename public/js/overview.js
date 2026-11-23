@@ -31,6 +31,58 @@
   let lastDetailTrigger;
   let lastDetailKey;
   let lastDetailHeading;
+  const sectionNav = find('.ov-nav');
+
+  function setupStatCarousel() {
+    const track = find('#ov-stat-cards');
+    const pager = find('.ov-stat-pager');
+    const cards = Array.from(track.children);
+    const nextButton = pager.querySelector('.ov-next-stat');
+    const position = pager.querySelector('.ov-stat-position');
+    const phone = window.matchMedia('(max-width: 520px)');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let current = -1;
+
+    function distanceFromCenter(card) {
+      const slide = card.getBoundingClientRect();
+      const viewport = track.getBoundingClientRect();
+      return slide.left - viewport.left + (slide.width - viewport.width) / 2;
+    }
+
+    nextButton.addEventListener('click', () => {
+      const next = (current + 1) % cards.length;
+      track.scrollBy({
+        left: distanceFromCenter(cards[next]),
+        behavior: next === 0 || reducedMotion.matches ? 'auto' : 'smooth',
+      });
+    });
+
+    function updatePosition() {
+      const distances = cards.map(card => Math.abs(distanceFromCenter(card)));
+      const nearest = distances.indexOf(Math.min(...distances));
+      if (nearest === current) return;
+      position.textContent = `Stat ${nearest + 1} of ${cards.length}`;
+      nextButton.textContent = nearest === cards.length - 1 ? 'First stat' : 'Next stat';
+      current = nearest;
+    }
+
+    function updateLayout() {
+      pager.hidden = !phone.matches;
+      if (phone.matches) {
+        track.closest('section').setAttribute('aria-roledescription', 'carousel');
+        track.addEventListener('scroll', updatePosition, { passive: true });
+        updatePosition();
+      } else {
+        track.closest('section').removeAttribute('aria-roledescription');
+        track.removeEventListener('scroll', updatePosition);
+      }
+    }
+
+    phone.addEventListener('change', updateLayout);
+    updateLayout();
+  }
+
+  setupStatCarousel();
 
   if (hasDetails) {
     page.querySelectorAll('[data-detail-open]').forEach(button => { button.hidden = false; });
@@ -173,6 +225,8 @@
       }
       if (key === 'failed') element.dataset.attention = String(value > 0);
     }
+    const failedMetric = find('#ov-metric-failed');
+    if (failedMetric) failedMetric.dataset.state = Number(data.stats.failed) > 0 ? 'attention' : 'clear';
     find('#ov-write-notice').hidden = data.sync_enabled;
     applyFilter();
     checked.textContent = `Updated ${updatedAt} UTC`;
@@ -254,8 +308,11 @@
 
   const links = Array.from(page.querySelectorAll('.ov-nav a'));
   const sections = links.map(link => document.getElementById(link.hash.slice(1)));
+  const mobileHeader = document.querySelector('.mobile-topbar');
   function updateNavigation() {
-    const edge = find('.ov-nav').getBoundingClientRect().bottom + 20;
+    const stickyTop = parseFloat(getComputedStyle(sectionNav).top);
+    sectionNav.classList.toggle('is-pinned', sectionNav.getBoundingClientRect().top <= stickyTop + 1);
+    const edge = sectionNav.getBoundingClientRect().bottom + 20;
     let active = sections[0];
     for (const section of sections) {
       const top = section.getBoundingClientRect().top;
@@ -273,6 +330,15 @@
     if (frame) return;
     frame = requestAnimationFrame(() => { frame = null; updateNavigation(); });
   }
+  const navSize = new ResizeObserver(entries => {
+    for (const { target } of entries) {
+      const property = target === sectionNav ? '--ov-nav-height' : '--ov-mobile-header-height';
+      page.style.setProperty(property, `${target.offsetHeight}px`);
+    }
+    queueNavigation();
+  });
+  navSize.observe(sectionNav);
+  if (mobileHeader) navSize.observe(mobileHeader);
   window.addEventListener('scroll', queueNavigation, { passive: true });
   window.addEventListener('resize', queueNavigation);
   window.addEventListener('hashchange', queueNavigation);

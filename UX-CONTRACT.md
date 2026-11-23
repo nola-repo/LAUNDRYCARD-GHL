@@ -24,17 +24,19 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 |---|---|---|---|---|
 | Table selection | Not used on Overview | Overview Blade tables | Read-only rows | Keyboard and narrow viewport review |
+| Sign-in form | Laravel auth route/controller, login Blade, and `login.js` | Authentication behavior below | Responsive brand panel, inline field errors, password reveal | Keyboard and narrow viewport review |
 | Scrollbar | Global admin tokens plus Overview geometry | `admin.css`, `overview.css` | Table regions may scroll within aligned panels | Computed style and keyboard scrolling |
 | Record details | One Overview read-only dialog | `overview.blade.php`, `overview.js` | Service card or table record content | Keyboard open, close, Escape, and focus return |
 | CRUD | Not used on Overview | Admin routes and sibling pages | Out of Overview scope | Sibling workflow evidence |
 
 ## Overview behavior
 
-- Navigation links point to page sections and remain sticky while scrolling. On narrow screens they wrap so every section link stays visible.
-- System health is always visible as four service cards. Additional diagnostics open in the shared read-only detail dialog.
-- Store, run, customer-card, and event rows each provide a labeled Details action. Customer identifiers and contact information remain masked.
+- Navigation links point to page sections and remain sticky while scrolling. The pinned banner displays “Integration overview” alongside the section links, or above them when space is limited. On mobile it sits beneath the app menu and centers the wrapped links.
+- System health is always visible as four service cards. Each card keeps a transparent horizontal ellipsis action pinned at its top right; the status pill sits below the service name. Additional diagnostics open in the shared read-only detail dialog.
+- Store, run, customer-card, and event rows each provide a read-only detail dialog through an icon-only ellipsis control; the button has a full accessible label. Customer identifiers and contact information remain masked.
 - The dialog uses semantic `<dialog>` behavior: it contains focus while open, closes with Escape or its Close button, and returns focus to its trigger or the containing table context if live updates replace the row.
-- Table regions scroll independently with sticky column headers. Related store-routing and recent-run tables share a grid row and stretch to equal panel height.
+- On desktop, related store-routing and recent-run tables share a grid row and stretch to equal panel height. At tablet and phone widths, records become labeled cards so table data is readable without horizontal scrolling.
+- Every Details action uses a labeled three-dot icon button and opens the shared dialog. The mobile navigation toggle remains separate from page content, reports its expanded state, and closes on Escape.
 - Recent-card filtering is client-side, clears through the labeled Clear button, and is not written to the URL. Section navigation may update the hash.
 - Empty table states remain visible. A filter with no matches announces its result count and displays a no-match row.
 
@@ -46,11 +48,19 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 - A 401 pauses polling and offers Sign in. A 403 pauses polling and announces Access denied. Do not show raw credentials or unmasked customer data.
 - Preserve focused row actions through updates; after a removed row, return focus to its panel heading when possible.
 
+## Authentication
+
+- The `/login` screen is available to guests and uses the LaundryCard mascot and palette tokens from `admin.css`. Use the mascot inside the ticket illustration without a separate page header. On narrow screens, the illustration moves below the form.
+- Keep the primary action labeled `Sign in` and use the logo's own transfer arrows as the only transfer-arrow illustration on the page.
+- Only administrators can sign in. Keep the password masked by default, allow a labeled show/hide control, and never repopulate a password after a failed request.
+- Show validation and credential errors beside the affected field, associate them with the input, preserve the entered email, and focus the first invalid field. Prevent duplicate submits while a request is in progress.
+- Logout is an authenticated POST action. Login attempts are throttled by the server.
+
 ## Navigation and responsive behavior
 
 - Route titles use `{Page} · LaundryCard ⇄ GHL` through the shared app layout.
 - Desktop keeps the admin sidebar. Narrow layouts use the shared sticky mobile topbar and drawer.
-- Overview tables keep their columns and scroll horizontally when needed; they do not collapse records into unlabeled cards.
+- At widths up to 1180px, Overview tables retain native table semantics but visually reflow each record into a labeled card. The ellipsis action sits in a reserved top-right slot and never occupies a narrow data column. At wider widths, aligned table columns remain visible with their existing scroll regions.
 - Section scroll offsets account for the sticky section rail and mobile topbar so headings remain visible after anchor navigation.
 
 ## Verification
