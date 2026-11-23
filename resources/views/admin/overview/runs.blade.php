@@ -7,13 +7,14 @@
     $mode = ucfirst(str_replace('_', ' ', $run->mode));
     $start = $run->started_at?->copy()->utc();
     $day = $start?->format('M j, Y') ?? 'Start date unavailable';
-    $showDay = $day !== $previousDay;
-    $previousDay = $day;
+    $dayKey = $start?->format('Y-m-d') ?? 'unknown';
+    $showDay = $dayKey !== $previousDay;
+    $previousDay = $dayKey;
   @endphp
-  <li data-key="{{ $run->id }}">
-    @if($showDay)
-      <p class="ov-run-day">{{ $day }}</p>
-    @endif
+  @if($showDay)
+    <li class="ov-run-separator" data-key="day-{{ $dayKey }}" role="presentation"><p class="ov-run-day">{{ $day }}</p></li>
+  @endif
+  <li class="ov-run-card" data-key="{{ $run->id }}">
     <div class="ov-run-entry">
       <strong class="ov-run-job">{{ $job }}</strong>
       <div class="ov-run-meta">
@@ -42,5 +43,5 @@
     </div>
   </li>
 @empty
-  <li data-key="empty" class="ov-empty">No integration runs recorded yet.</li>
+  <li data-key="empty" class="ov-empty ov-run-empty">No integration runs recorded yet.</li>
 @endforelse

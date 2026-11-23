@@ -25,7 +25,7 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 |---|---|---|---|---|
 | Table selection | Not used on Overview | Overview Blade tables | Read-only rows | Keyboard and narrow viewport review |
 | Sign-in form | Laravel auth route/controller, login Blade, and `login.js` | Authentication behavior below | Responsive brand panel, inline field errors, password reveal | Keyboard and narrow viewport review |
-| Scrollbar | Global admin tokens plus Overview geometry | `admin.css`, `overview.css` | Table regions may scroll within aligned panels | Computed style and keyboard scrolling |
+| Scrollbar | Shared admin palette plus Overview geometry | `admin.css`, `overview.css` | Rounded brand-colored thumbs on page, sidebar, and table regions; keyboard-accessible contained table scrolling | Computed style and keyboard scrolling |
 | Record details | One Overview read-only dialog | `overview.blade.php`, `overview.js` | Service card or table record content | Keyboard open, close, Escape, and focus return |
 | CRUD | Not used on Overview | Admin routes and sibling pages | Out of Overview scope | Sibling workflow evidence |
 
@@ -35,7 +35,7 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 - System health is always visible as four service cards. Each card keeps a transparent horizontal ellipsis action pinned at its top right; the status pill sits below the service name. Additional diagnostics open in the shared read-only detail dialog.
 - Store, run, customer-card, and event rows each provide a read-only detail dialog through an icon-only ellipsis control; the button has a full accessible label. Customer identifiers and contact information remain masked.
 - The dialog uses semantic `<dialog>` behavior: it contains focus while open, closes with Escape or its Close button, and returns focus to its trigger or the containing table context if live updates replace the row.
-- On desktop, related store-routing and recent-run tables share a grid row and stretch to equal panel height. At tablet and phone widths, records become labeled cards so table data is readable without horizontal scrolling.
+- On desktop, Store routing and Recent runs share a grid row and align at both edges. Recent runs shows the eight newest jobs grouped by UTC date in two columns, with rows using the available panel height and no nested scrolling. At tablet and phone widths, the panels stack and Recent runs switches to one column; records become labeled cards so table data is readable without horizontal scrolling.
 - Every Details action uses a labeled three-dot icon button and opens the shared dialog. The mobile navigation toggle remains separate from page content, reports its expanded state, and closes on Escape.
 - Recent-card filtering is client-side, clears through the labeled Clear button, and is not written to the URL. Section navigation may update the hash.
 - Empty table states remain visible. A filter with no matches announces its result count and displays a no-match row.
