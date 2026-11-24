@@ -29,19 +29,19 @@
 
     <div class="oauth-hero-bottom">
       <div class="oauth-actions" role="group" aria-label="OAuth installation actions">
-        <button type="button" class="btn oauth-btn oauth-btn-secondary" data-open-refresh-dialog>
+        <button type="button" class="btn oauth-btn oauth-btn-secondary" data-open-refresh-dialog aria-label="Refresh all tokens">
           <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M5.6 9A7 7 0 0 1 17 6l3 6M4 12l3 6a7 7 0 0 0 11.4-3"></path></svg>
           <span>Refresh all tokens</span>
         </button>
-        <a href="{{ route('admin.oauth.diagnose') }}" class="btn oauth-btn oauth-btn-secondary">
+        <a href="{{ route('admin.oauth.diagnose') }}" class="btn oauth-btn oauth-btn-secondary" aria-label="Diagnostics">
           <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
           <span>Diagnostics</span>
         </a>
-        <button type="button" class="btn oauth-btn oauth-btn-secondary" id="copy-auth-url">
+        <button type="button" class="btn oauth-btn oauth-btn-secondary" id="copy-auth-url" aria-label="Copy auth URL">
           <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
           <span>Copy auth URL</span>
         </button>
-        <a href="{{ route('admin.connect') }}" class="btn primary oauth-btn oauth-btn-primary oauth-connect">
+        <a href="{{ route('admin.connect') }}" class="btn primary oauth-btn oauth-btn-primary oauth-connect" aria-label="Connect location">
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
           <span>Connect location</span>
         </a>
@@ -55,33 +55,6 @@
 
   <div class="oauth-copy-status" id="oauth-copy-status" role="status" aria-live="polite" hidden></div>
 
-  <section class="oauth-summary" aria-label="OAuth installation summary">
-    <article class="oauth-stat">
-      <span class="oauth-stat-icon oauth-stat-icon--brand" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path><path d="m9 12 2 2 4-4"></path></svg>
-      </span>
-      <div><span class="oauth-stat-label">Locations</span><strong>{{ number_format($totalConns) }}</strong></div>
-    </article>
-    <article class="oauth-stat">
-      <span class="oauth-stat-icon oauth-stat-icon--green" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="m9 11 3 3L22 4"></path></svg>
-      </span>
-      <div><span class="oauth-stat-label">Active</span><strong>{{ number_format($activeConns) }}</strong></div>
-    </article>
-    <article class="oauth-stat">
-      <span class="oauth-stat-icon oauth-stat-icon--blue" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9v3a6 6 0 0 1-6 6H9"></path></svg>
-      </span>
-      <div><span class="oauth-stat-label">Routed</span><strong>{{ number_format($mappedConns) }}</strong></div>
-    </article>
-    <article class="oauth-stat">
-      <span class="oauth-stat-icon oauth-stat-icon--orange" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4m0 4h.01"></path></svg>
-      </span>
-      <div><span class="oauth-stat-label">Unassigned</span><strong>{{ number_format($unmappedConns) }}</strong></div>
-    </article>
-  </section>
-
   <section class="oauth-section" aria-labelledby="oauth-connections-heading">
     <div class="oauth-section-head">
       <div>
@@ -93,6 +66,37 @@
     </div>
 
     <div class="oauth-connection-grid">
+      <section class="oauth-summary" aria-label="OAuth installation summary">
+        <article class="oauth-stat oauth-stat--brand">
+          <span class="oauth-stat-icon oauth-stat-icon--brand" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path><path d="m9 12 2 2 4-4"></path></svg>
+          </span>
+          <div><span class="oauth-stat-label">Locations</span><strong>{{ number_format($totalConns) }}</strong><small>Registered connections</small></div>
+          <span class="oauth-stat-watermark" aria-hidden="true"><svg width="176" height="176" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path><path d="m9 12 2 2 4-4"></path></svg></span>
+        </article>
+        <article class="oauth-stat oauth-stat--green">
+          <span class="oauth-stat-icon oauth-stat-icon--green" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="m9 11 3 3L22 4"></path></svg>
+          </span>
+          <div><span class="oauth-stat-label">Active</span><strong>{{ number_format($activeConns) }}</strong><small>Active connections</small></div>
+          <span class="oauth-stat-watermark" aria-hidden="true"><svg width="176" height="176" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="m9 11 3 3L22 4"></path></svg></span>
+        </article>
+        <article class="oauth-stat oauth-stat--blue">
+          <span class="oauth-stat-icon oauth-stat-icon--blue" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9v3a6 6 0 0 1-6 6H9"></path></svg>
+          </span>
+          <div><span class="oauth-stat-label">Routed</span><strong>{{ number_format($mappedConns) }}</strong><small>Assigned to a store</small></div>
+          <span class="oauth-stat-watermark" aria-hidden="true"><svg width="176" height="176" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9v3a6 6 0 0 1-6 6H9"></path></svg></span>
+        </article>
+        <article class="oauth-stat oauth-stat--orange">
+          <span class="oauth-stat-icon oauth-stat-icon--orange" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4m0 4h.01"></path></svg>
+          </span>
+          <div><span class="oauth-stat-label">Unassigned</span><strong>{{ number_format($unmappedConns) }}</strong><small>Awaiting assignment</small></div>
+          <span class="oauth-stat-watermark" aria-hidden="true"><svg width="176" height="176" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4m0 4h.01"></path></svg></span>
+        </article>
+      </section>
+
       @forelse($connections as $c)
         @php($expiryState = $c->tokenExpiryState())
         <article class="oauth-connection-card">

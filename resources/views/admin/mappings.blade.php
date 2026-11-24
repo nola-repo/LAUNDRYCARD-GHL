@@ -1,203 +1,168 @@
 @extends('layouts.app')
-@section('title','Branch Mapping Monitor')
+@section('title', 'Branch Mapping')
+@push('styles')
+<link rel="stylesheet" href="{{ asset('css/admin-actions.css') }}?v={{ filemtime(public_path('css/admin-actions.css')) }}">
+<link rel="stylesheet" href="{{ asset('css/mappings.css') }}?v={{ filemtime(public_path('css/mappings.css')) }}">
+@endpush
+@push('scripts')
+<script src="{{ asset('js/admin-actions.js') }}?v={{ filemtime(public_path('js/admin-actions.js')) }}" defer></script>
+<script src="{{ asset('js/mappings.js') }}?v={{ filemtime(public_path('js/mappings.js')) }}" defer></script>
+@endpush
 @section('content')
-
-<div class="page-head">
-  <div>
-    <span class="page-kicker">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M18 6v6a6 6 0 0 1-6 6H6"></path></svg>
-      Routing Topology
-    </span>
-    <h1>Branch Mapping</h1>
-    <p class="sub">Each store is routed to a GoHighLevel location from explicit configuration and active OAuth installs. Unresolved or conflicting branches are held — never rerouted.</p>
-  </div>
-  <form method="POST" action="{{ route('admin.mappings.auto-map') }}">
-    @csrf
-    <button type="submit" class="btn primary">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-      <span>Run auto-map</span>
-    </button>
-  </form>
-</div>
-
 @php
   $totalStores = $rows->count();
-  $routableCount = $rows->filter(fn($r) => $r['decision']['routable'])->count();
+  $routableCount = $rows->filter(fn ($row) => $row['decision']['routable'])->count();
   $heldCount = $totalStores - $routableCount;
+  $reasonLabels = [
+    'no_mapping' => ['No mapping', 'No verified location is assigned to this branch.'],
+    'mapping_not_verified' => ['Not verified', 'The proposed mapping is not verified for sync.'],
+    'mapping_conflict' => ['Mapping conflict', 'The configured location differs from the saved mapping.'],
+    'connection_unusable' => ['Connection unavailable', 'The mapped OAuth connection cannot be used for sync.'],
+  ];
 @endphp
 
-<div class="metric-row">
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">Discovered Branches</span>
-      <div class="metric-icon metric-icon--violet">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-      </div>
+<div class="mapping-page" id="mapping-page">
+  <header class="mapping-hero" id="mapping-top">
+    <div class="mapping-hero-copy">
+      <p class="mapping-eyebrow">Branch routing · LaundryCard + GoHighLevel</p>
+      <h1>Branch mapping</h1>
+      <p class="mapping-intro">Every branch, its own destination. Review store connections and resolve what is holding sync.</p>
     </div>
-    <div class="metric-num">{{ $totalStores }}</div>
-    <div class="metric-sub">Active LaundryCard stores</div>
+    <div class="mapping-rule">
+      <span class="mapping-pair-symbol" aria-hidden="true"><i></i><span></span><i></i></span>
+      <strong>One branch. One location.</strong>
+      <p>Only configured pairs can sync.<br>Conflicting routes stay on hold.</p>
+    </div>
+    <dl class="mapping-totals" aria-label="Branch routing summary">
+      <div><dt>Discovered branches</dt><dd>{{ $totalStores }}</dd></div>
+      <div class="mapping-total-ready"><dt>Ready to sync</dt><dd>{{ $routableCount }}</dd></div>
+      <div class="mapping-total-held"><dt>Held branches</dt><dd>{{ $heldCount }}</dd></div>
+      <div class="mapping-total-locations"><dt>Unassigned locations</dt><dd>{{ $unassigned->count() }}</dd></div>
+    </dl>
+  </header>
+
+  <div class="mapping-toolbar" data-mapping-toolbar>
+    <a class="mapping-toolbar-title" href="#mapping-top">Branch mapping</a>
+    <nav aria-label="Branch mapping sections">
+      <a href="#branch-routes" aria-current="location">Routes</a>
+      <a href="#unassigned-locations">Unassigned <span>{{ $unassigned->count() }}</span></a>
+      <a href="#mapping-activity">Activity</a>
+    </nav>
+    <div class="mapping-toolbar-actions">
+      <a class="admin-action" href="{{ route('admin.installations') }}">OAuth installations</a>
+      <button class="admin-action admin-action-primary" type="button" data-confirm-open="auto-map-dialog" aria-haspopup="dialog">Run auto-map</button>
+    </div>
   </div>
 
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">Routable Pairs</span>
-      <div class="metric-icon metric-icon--emerald">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-      </div>
+  <section class="mapping-section" id="branch-routes" aria-labelledby="branch-routes-title">
+    <div class="mapping-section-heading">
+      <div><p class="mapping-eyebrow">Store connections</p><h2 id="branch-routes-title" tabindex="-1">Branch routes</h2></div>
+      <p>Read across a row to trace each destination.</p>
     </div>
-    <div class="metric-num" style="color:var(--ok-light)">{{ $routableCount }}</div>
-    <div class="metric-sub">1-to-1 store to location route</div>
-  </div>
-
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">Unmapped Branches</span>
-      <div class="metric-icon metric-icon--amber">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-      </div>
-    </div>
-    <div class="metric-num">{{ $heldCount }}</div>
-    <div class="metric-sub">Safely held from contact sync</div>
-  </div>
-
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">Unassigned GHL Installs</span>
-      <div class="metric-icon metric-icon--cyan">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-      </div>
-    </div>
-    <div class="metric-num">{{ $unassigned->count() }}</div>
-    <div class="metric-sub">Locations without a store pair</div>
-  </div>
-</div>
-
-<div class="table-card">
-  <div class="table-card-header">
-    <div>
-      <h2>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M18 6v6a6 6 0 0 1-6 6H6"></path></svg>
-        Store ⇄ Location Routing Matrix
-      </h2>
-      <span class="muted" style="font-size:12px">Strict deterministic mapping between physical LaundryCard branches and GoHighLevel sub-accounts</span>
-    </div>
-    <span class="badge b-info">1:1 Isolation Enforced</span>
-  </div>
-
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Store ID</th>
-          <th>LaundryCard Branch</th>
-          <th>GHL Location ID</th>
-          <th>GHL Sub-Account</th>
-          <th>Mapping Status</th>
-          <th>Provenance</th>
-          <th>OAuth Health</th>
-        </tr>
-      </thead>
-      <tbody>
-        @forelse($rows as $row)
-          @php($store = $row['store'])
-          @php($decision = $row['decision'])
-          @php($mapping = $decision['mapping'])
-          @php($connection = $decision['connection'])
-          <tr>
-            <td><span class="store-id-pill">Store {{ $store->store_id }}</span></td>
-            <td style="font-weight:700;color:var(--text-title)">{{ $store->name ?? '—' }}</td>
-            <td>
-              @if($connection?->location_id)
-                <span class="card-mono">{{ $connection->location_id }}</span>
-              @else
-                <span class="muted">—</span>
-              @endif
-            </td>
-            <td style="font-weight:600;color:var(--text-title)">{{ $connection?->location_name ?? '—' }}</td>
-            <td>
-              @if($decision['routable'])
-                <x-badge value="verified"/>
-              @else
-                <x-badge :value="$decision['reason'] ?? 'unmapped'"/>
-              @endif
-            </td>
-            <td><span class="tag-chip">{{ $mapping?->origin ?? 'unresolved' }}</span></td>
-            <td>
-              @if($connection)
-                <x-badge :value="$connection->status"/>
-              @else
-                <span class="muted" style="font-size:12px">no authorized connection</span>
-              @endif
-            </td>
-          </tr>
-        @empty
-          <tr>
-            <td colspan="7" class="muted" style="text-align:center;padding:32px">No LaundryCard stores have been discovered.</td>
-          </tr>
-        @endforelse
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div class="grid g2">
-  <div class="card">
-    <div class="card-header-bar">
-      <h2>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-        Authorized GHL locations without a resolved mapping
-      </h2>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      @forelse($unassigned as $connection)
-        <div class="clay-well" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div>
-            <div style="font-weight:700;color:var(--text-title)">{{ $connection->location_name ?? '—' }}</div>
-            <div class="mono muted" style="font-size:11.5px;margin-top:2px">{{ $connection->location_id }}</div>
+    <div class="mapping-route-panel">
+      <div class="mapping-filters" data-mapping-controls hidden>
+        <div class="mapping-search">
+          <label for="mapping-search">Find a branch or location</label>
+          <div class="mapping-search-field">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+            <input id="mapping-search" type="search" autocomplete="off" placeholder="Name, store ID or location ID" aria-controls="mapping-route-body">
+            <button type="button" class="mapping-search-clear" aria-label="Clear branch search" hidden>×</button>
           </div>
-          <x-badge :value="$connection->status"/>
         </div>
-      @empty
-        <div class="clay-well muted" style="text-align:center;padding:24px">
-          None — every location is mapped.
+        <div class="mapping-filter-group" role="group" aria-label="Filter by routing status">
+          <button type="button" data-mapping-filter="all" aria-pressed="true">All <span>{{ $totalStores }}</span></button>
+          <button type="button" data-mapping-filter="ready" aria-pressed="false">Ready <span>{{ $routableCount }}</span></button>
+          <button type="button" data-mapping-filter="held" aria-pressed="false">Held <span>{{ $heldCount }}</span></button>
         </div>
-      @endforelse
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header-bar">
-      <h2>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-        Automatic mapping activity
-      </h2>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>When</th>
-            <th>Decision</th>
-            <th>Store</th>
-            <th>Location</th>
-          </tr>
-        </thead>
-        <tbody>
-          @forelse($audit as $entry)
-            <tr>
-              <td class="muted">{{ $entry->created_at?->diffForHumans() }}</td>
-              <td><x-badge :value="$entry->action"/></td>
-              <td class="mono">{{ $entry->store?->store_id ?? '—' }}</td>
-              <td class="mono">{{ $entry->connection?->location_id ?? '—' }}</td>
+      </div>
+      <table class="mapping-route-table">
+        <caption class="mapping-sr-only">LaundryCard branches and their GoHighLevel destinations, routing decisions, mapping sources, and OAuth health.</caption>
+        <thead><tr><th scope="col">LaundryCard branch</th><th scope="col">GoHighLevel location</th><th scope="col">Routing decision</th><th scope="col">Source &amp; OAuth</th></tr></thead>
+        <tbody id="mapping-route-body">
+          @forelse($rows as $row)
+            @php
+              $store = $row['store'];
+              $decision = $row['decision'];
+              $mapping = $decision['mapping'];
+              $connection = $decision['connection'];
+              [$reasonLabel, $reasonHelp] = $reasonLabels[$decision['reason'] ?? ''] ?? ['On hold', 'This branch does not have a usable verified route.'];
+              $origin = match ($mapping?->origin) {
+                'explicit_config' => 'Configured pair',
+                null => 'Unresolved',
+                default => ucfirst(str_replace('_', ' ', $mapping->origin)),
+              };
+            @endphp
+            <tr data-mapping-row data-routing="{{ $decision['routable'] ? 'ready' : 'held' }}">
+              <th scope="row" data-label="LaundryCard branch">
+                <div class="mapping-branch-identity">
+                  <span class="mapping-branch-mark" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 8h.01M15 8h.01M9 11h.01M15 11h.01"/></svg></span>
+                  <div><strong>{{ $store->name ?: 'Unnamed branch' }}</strong><span class="mapping-id">Store {{ $store->store_id }}</span>@if($store->status !== 'active')<span class="mapping-store-state">{{ ucfirst($store->status) }} in store discovery</span>@endif</div>
+                </div>
+              </th>
+              <td data-label="GoHighLevel location" class="mapping-destination">
+                <strong>{{ $connection?->location_name ?: ($connection ? 'Unnamed location' : 'No location assigned') }}</strong>
+                @if($connection?->location_id)<span class="mapping-id">{{ $connection->location_id }}</span>@else<span class="mapping-cell-note">Awaiting a verified pair</span>@endif
+              </td>
+              <td data-label="Routing decision">
+                <span class="mapping-state {{ $decision['routable'] ? 'mapping-state-ready' : 'mapping-state-held' }}"><span aria-hidden="true">{{ $decision['routable'] ? '✓' : '!' }}</span>{{ $decision['routable'] ? 'Ready to sync' : $reasonLabel }}</span>
+                <p class="mapping-cell-note">{{ $decision['routable'] ? 'Verified branch and location pair.' : $reasonHelp }}</p>
+              </td>
+              <td data-label="Source & OAuth">
+                <span class="mapping-origin">{{ $origin }}</span>
+                @if($connection)<span class="mapping-oauth-health">OAuth <x-badge :value="$connection->status" /></span>@else<span class="mapping-cell-note">No authorized connection</span>@endif
+              </td>
             </tr>
           @empty
-            <tr>
-              <td colspan="4" class="muted" style="text-align:center;padding:24px">No mapping decisions recorded.</td>
-            </tr>
+            <tr><td colspan="4" class="mapping-empty"><strong>No branches discovered yet</strong><p>Branches will appear after LaundryCard store discovery runs.</p></td></tr>
           @endforelse
+          <tr data-mapping-no-results hidden><td colspan="4" class="mapping-empty"><strong>No matching branches</strong><p>Try a different name or ID, or clear your filters.</p><button type="button" class="admin-action" data-mapping-reset>Clear filters</button></td></tr>
         </tbody>
       </table>
+      <div class="mapping-pagination" data-mapping-controls hidden>
+        <p id="mapping-result-count" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div><button type="button" class="admin-action" data-mapping-previous>Previous</button><span data-mapping-page-count></span><button type="button" class="admin-action" data-mapping-next>Next</button></div>
+      </div>
     </div>
+    <p class="mapping-route-note">Held branches remain excluded from contact sync until their configured route is usable.</p>
+  </section>
+
+  <div class="mapping-support-grid">
+    <section class="mapping-panel mapping-section" id="unassigned-locations" aria-labelledby="unassigned-title">
+      <div class="mapping-panel-heading"><div><p class="mapping-eyebrow">Awaiting a branch</p><h2 id="unassigned-title" tabindex="-1">Unassigned locations</h2></div><span class="mapping-count">{{ $unassigned->count() }}</span></div>
+      <p class="mapping-panel-intro">OAuth locations without a verified branch mapping.</p>
+      <div class="mapping-list-scroll" tabindex="0" role="region" aria-label="Unassigned OAuth locations">
+        <ul class="mapping-location-list">
+          @forelse($unassigned as $connection)
+            <li><div><strong>{{ $connection->location_name ?: 'Unnamed location' }}</strong><span class="mapping-id">{{ $connection->location_id }}</span></div><x-badge :value="$connection->status" /></li>
+          @empty
+            <li class="mapping-empty"><strong>No unassigned locations</strong><p>There are no OAuth locations awaiting a branch mapping.</p></li>
+          @endforelse
+        </ul>
+      </div>
+      <div class="mapping-panel-footer"><p>Check the configured store/location pair before running auto-map.</p><a class="admin-action" href="{{ route('admin.installations') }}">Review installations</a></div>
+    </section>
+
+    <section class="mapping-panel mapping-section" id="mapping-activity" aria-labelledby="mapping-activity-title">
+      <div class="mapping-panel-heading"><div><p class="mapping-eyebrow">Mapping history</p><h2 id="mapping-activity-title" tabindex="-1">Recent decisions</h2></div><span class="mapping-history-label">Latest {{ $audit->count() }}</span></div>
+      <p class="mapping-panel-intro">Automatic mapping decisions, recorded in UTC.</p>
+      <div class="mapping-list-scroll" tabindex="0" role="region" aria-label="Recent mapping decisions">
+        <ol class="mapping-activity-list">
+          @forelse($audit as $entry)
+            <li>
+              <div class="mapping-activity-title"><strong>{{ $entry->action === 'auto_verified' ? 'Pair verified automatically' : ucfirst(str_replace('_', ' ', $entry->action)) }}</strong><time datetime="{{ $entry->created_at?->toIso8601String() }}">{{ $entry->created_at?->utc()->format('M d, Y H:i') }} UTC</time></div>
+              <p><span class="mapping-id">{{ $entry->store ? 'Store '.$entry->store->store_id : 'Store unavailable' }}</span><span class="mapping-activity-separator" aria-hidden="true">/</span><span class="mapping-id">{{ $entry->connection?->location_id ?? 'Location unavailable' }}</span></p>
+            </li>
+          @empty
+            <li class="mapping-empty"><strong>No decisions recorded yet</strong><p>New mapping decisions will appear here after auto-map runs.</p></li>
+          @endforelse
+        </ol>
+      </div>
+    </section>
   </div>
+
+  <x-confirm-action id="auto-map-dialog" title="Run automatic branch mapping?" :action="route('admin.mappings.auto-map')" confirm-label="Run auto-map" busy-label="Running auto-map…">
+    <p>Check the configured branch/location pairs and create any missing mappings where both the store and OAuth connection are active.</p>
+    <p>Existing mappings stay in place. Conflicting or unresolved branches remain on hold.</p>
+  </x-confirm-action>
 </div>
 @endsection

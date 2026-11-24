@@ -149,9 +149,24 @@ html::-webkit-scrollbar-thumb:hover {
   background-clip: padding-box;
 }
 html::-webkit-scrollbar-corner { background: transparent; }
+/* New app-owned scroll regions inherit the console palette automatically. */
+body * { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; }
+body *::-webkit-scrollbar { width: 10px; height: 10px; }
+body *::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+body *::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--scrollbar-thumb) 55%, var(--ghl-blue));
+  background-clip: padding-box;
+}
+body *::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); background-clip: padding-box; }
+body *::-webkit-scrollbar-thumb:active { background: var(--accent-hover); background-clip: padding-box; }
 @supports selector(::-webkit-scrollbar) {
   html { scrollbar-color: auto; scrollbar-width: auto; }
+  body * { scrollbar-color: auto; scrollbar-width: auto; }
 }
+@media (forced-colors: active) { html, body * { scrollbar-color: auto; } }
 
 body {
   margin: 0;

@@ -29,6 +29,8 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 | Scrollbar | Shared admin palette plus Overview geometry | `admin.css`, `overview.css` | Rounded brand-colored thumbs on page, sidebar, and table regions; keyboard-accessible contained table scrolling | Computed style and keyboard scrolling |
 | Record details | One Overview read-only dialog | `overview.blade.php`, `overview.js` | Service card or table record content | Keyboard open, close, Escape, and focus return |
 | CRUD | Not used on Overview | Admin routes and sibling pages | Out of Overview scope | Sibling workflow evidence |
+| Branch route records | `admin.mappings`, `mappings.js`, `mappings.css` | `BranchMappingService::resolve`, `DashboardController::mappings` | Four-column comparison; labeled records below 1180px | Search, filters, paging, empty state, narrow viewport |
+| Bulk action confirmation | `confirm-action` Blade component, `admin-actions.js`, `admin-actions.css` | Existing authenticated POST action and shared modal behavior | Branch auto-map; existing OAuth dialog is a legacy variant | Cancel, Escape, focus return, busy state, duplicate prevention |
 
 ## Overview behavior
 
@@ -66,12 +68,24 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 
 ## OAuth installations
 
+- Place the four totals in a 2×2 summary card first in the location grid. Desktop cards share equal dimensions; mobile stacks the summary before the locations while preserving the four-stat grouping.
 - Show each GoHighLevel connection as a responsive location card. Preserve its status, token expiry, refresh timestamps, API success, installed date, granted scopes, mapped store, recent errors, and the existing refresh, test, and reconnect actions.
 - Access and refresh tokens remain encrypted at rest and are never rendered. The connection cards show operational metadata only.
 - Refresh All Tokens opens an app-owned confirmation dialog before submitting the existing batch refresh action. Copy auth URL reports success or recovery guidance in an inline status region and never displays the raw state value.
+- Header actions become icon-only at viewport widths of 1024px and below. Keep their accessible names, 44px touch targets, keyboard focus, and hover/focus labels; desktop retains visible text. This responsive change preserves the existing actions and their order.
 - A newly authorized location still requires an administrator to assign a LaundryCard branch before synchronization is enabled.
+
+## Branch mapping
+
+- The page is a monitor of the existing routing decisions from `BranchMappingService::resolve`. It does not offer manual assignment or change the service's configured-pair and connection-usability rules. Counts reflect the complete loaded branch set, including discovery statuses.
+- Show branch name/ID, mapped location name/ID, routing reason, mapping origin, and OAuth status. Distinguish no mapping, unverified proposals, conflicting configuration, and unusable connections. Do not label every held route as unmapped.
+- Local search matches the loaded route records, with a clear button, immediate filtering, IME-safe input, All/Ready/Held filters, and ten records per page. Persist `mapping_q`, `mapping_status`, and `mapping_page` in the URL. Reset/clamp page after filtering; Back/refresh restore the committed state. Without JavaScript, all records remain readable.
+- The compact graphite action/navigation banner sticks beneath the shared mobile topbar. Resize-aware scroll offsets keep section headings and focused controls visible. The route table follows document scrolling; the unassigned and recent-history lists use bounded, keyboard-accessible scroll regions with the global scrollbar theme.
+- Run auto-map opens the shared confirmation dialog. Cancel receives initial focus; Escape closes and focus returns to the trigger. Submission uses the existing CSRF-protected POST route, prevents duplicate submits, announces busy status without resizing the button, and reports the server result through the existing page flash system. Browser Back restores an enabled submit action.
+- Recent decisions retain the server's latest-15 limit and show absolute UTC times. Empty and no-results states explain what to do next. No tokens or secrets are rendered.
 
 ## Verification
 
+- Branch Mapping: existing dashboard, discovery/sync, and OAuth suites passed (52 tests, 338 assertions). Browser review covered desktop, tablet, 390px and 320px reflow, filters/search/clear, no-results and empty states, pagination/URL restoration, sticky section navigation, and confirmation focus/Escape/busy feedback. The preview uses sample records and simulates POST submission; production mappings were not changed. JavaScript syntax, Blade compilation, production build, strict UI audit, and DESIGN.md lint passed.
 - Compared with the Customer Records screen for masked customer fields and the existing UTC timestamp convention.
 - Verified with `node --check public/js/overview.js`, `php artisan view:cache`, `git diff --check`, and a browser preview at laptop width. The dashboard feature suite passed with 15 tests and 152 assertions.
