@@ -31,6 +31,7 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 | CRUD | Not used on Overview | Admin routes and sibling pages | Out of Overview scope | Sibling workflow evidence |
 | Branch route records | `admin.mappings`, `mappings.js`, `mappings.css` | `BranchMappingService::resolve`, `DashboardController::mappings` | Four-column comparison; labeled records below 1180px | Search, filters, paging, empty state, narrow viewport |
 | Bulk action confirmation | `confirm-action` Blade component, `admin-actions.js`, `admin-actions.css` | Existing authenticated POST action and shared modal behavior | Branch auto-map; existing OAuth dialog is a legacy variant | Cancel, Escape, focus return, busy state, duplicate prevention |
+| Compact sticky banners | `sticky-banner.js` with page CSS | Measured banner and mobile topbar heights | OAuth action bar and Branch Mapping action/navigation bar | Desktop/mobile scrolling, anchor offsets, dynamic feedback height |
 
 ## Overview behavior
 
@@ -73,6 +74,7 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 - Access and refresh tokens remain encrypted at rest and are never rendered. The connection cards show operational metadata only.
 - Refresh All Tokens opens an app-owned confirmation dialog before submitting the existing batch refresh action. Copy auth URL reports success or recovery guidance in an inline status region and never displays the raw state value.
 - Header actions become icon-only at viewport widths of 1024px and below. Keep their accessible names, 44px touch targets, keyboard focus, and hover/focus labels; desktop retains visible text. This responsive change preserves the existing actions and their order.
+- Keep the compact action banner visible while scrolling, beneath the mobile app bar. Copy feedback appears within the banner; resize-aware offsets account for its additional height. The title links back to the page heading.
 - A newly authorized location still requires an administrator to assign a LaundryCard branch before synchronization is enabled.
 
 ## Branch mapping
@@ -83,9 +85,11 @@ No maintained PRD, ADR, or API contract was found in the repository. The Overvie
 - The compact graphite action/navigation banner sticks beneath the shared mobile topbar. Resize-aware scroll offsets keep section headings and focused controls visible. The route table follows document scrolling; the unassigned and recent-history lists use bounded, keyboard-accessible scroll regions with the global scrollbar theme.
 - Run auto-map opens the shared confirmation dialog. Cancel receives initial focus; Escape closes and focus returns to the trigger. Submission uses the existing CSRF-protected POST route, prevents duplicate submits, announces busy status without resizing the button, and reports the server result through the existing page flash system. Browser Back restores an enabled submit action.
 - Recent decisions retain the server's latest-15 limit and show absolute UTC times. Empty and no-results states explain what to do next. No tokens or secrets are rendered.
+- Unassigned locations and Recent decisions share one divided panel with aligned desktop heights and stacked panes on narrower screens. History rows lead with branch names and label the store/location IDs separately. With no unassigned locations, show a compact, truthful “No locations waiting” state and retain Review installations.
 
 ## Verification
 
+- Sticky-banner and support-panel update: verified desktop alignment, mobile stacking, populated/empty lists, and 320px OAuth controls with no page overflow. Both banners pin below the mobile app bar; copy feedback updates the measured offset. Refresh confirmation opens, closes with Escape, and returns focus. The sample preview performs no server actions. Existing suites passed again (52 tests, 338 assertions), along with build, Blade compilation, JavaScript syntax, strict UI audit, and design lint.
 - Branch Mapping: existing dashboard, discovery/sync, and OAuth suites passed (52 tests, 338 assertions). Browser review covered desktop, tablet, 390px and 320px reflow, filters/search/clear, no-results and empty states, pagination/URL restoration, sticky section navigation, and confirmation focus/Escape/busy feedback. The preview uses sample records and simulates POST submission; production mappings were not changed. JavaScript syntax, Blade compilation, production build, strict UI audit, and DESIGN.md lint passed.
 - Compared with the Customer Records screen for masked customer fields and the existing UTC timestamp convention.
 - Verified with `node --check public/js/overview.js`, `php artisan view:cache`, `git diff --check`, and a browser preview at laptop width. The dashboard feature suite passed with 15 tests and 152 assertions.

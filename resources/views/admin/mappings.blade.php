@@ -5,6 +5,7 @@
 <link rel="stylesheet" href="{{ asset('css/mappings.css') }}?v={{ filemtime(public_path('css/mappings.css')) }}">
 @endpush
 @push('scripts')
+<script src="{{ asset('js/sticky-banner.js') }}?v={{ filemtime(public_path('js/sticky-banner.js')) }}" defer></script>
 <script src="{{ asset('js/admin-actions.js') }}?v={{ filemtime(public_path('js/admin-actions.js')) }}" defer></script>
 <script src="{{ asset('js/mappings.js') }}?v={{ filemtime(public_path('js/mappings.js')) }}" defer></script>
 @endpush
@@ -21,7 +22,7 @@
   ];
 @endphp
 
-<div class="mapping-page" id="mapping-page">
+<div class="mapping-page" id="mapping-page" data-sticky-page>
   <header class="mapping-hero" id="mapping-top">
     <div class="mapping-hero-copy">
       <p class="mapping-eyebrow">Branch routing · LaundryCard + GoHighLevel</p>
@@ -41,7 +42,7 @@
     </dl>
   </header>
 
-  <div class="mapping-toolbar" data-mapping-toolbar>
+  <div class="mapping-toolbar" data-mapping-toolbar data-sticky-banner>
     <a class="mapping-toolbar-title" href="#mapping-top">Branch mapping</a>
     <nav aria-label="Branch mapping sections">
       <a href="#branch-routes" aria-current="location">Routes</a>
@@ -127,30 +128,39 @@
   </section>
 
   <div class="mapping-support-grid">
-    <section class="mapping-panel mapping-section" id="unassigned-locations" aria-labelledby="unassigned-title">
+    <section class="mapping-panel mapping-section mapping-assignment-panel {{ $unassigned->isEmpty() ? 'mapping-assignment-clear' : '' }}" id="unassigned-locations" aria-labelledby="unassigned-title">
       <div class="mapping-panel-heading"><div><p class="mapping-eyebrow">Awaiting a branch</p><h2 id="unassigned-title" tabindex="-1">Unassigned locations</h2></div><span class="mapping-count">{{ $unassigned->count() }}</span></div>
       <p class="mapping-panel-intro">OAuth locations without a verified branch mapping.</p>
+      @if($unassigned->isNotEmpty())
       <div class="mapping-list-scroll" tabindex="0" role="region" aria-label="Unassigned OAuth locations">
         <ul class="mapping-location-list">
-          @forelse($unassigned as $connection)
+          @foreach($unassigned as $connection)
             <li><div><strong>{{ $connection->location_name ?: 'Unnamed location' }}</strong><span class="mapping-id">{{ $connection->location_id }}</span></div><x-badge :value="$connection->status" /></li>
-          @empty
-            <li class="mapping-empty"><strong>No unassigned locations</strong><p>There are no OAuth locations awaiting a branch mapping.</p></li>
-          @endforelse
+          @endforeach
         </ul>
       </div>
-      <div class="mapping-panel-footer"><p>Check the configured store/location pair before running auto-map.</p><a class="admin-action" href="{{ route('admin.installations') }}">Review installations</a></div>
+      @else
+      <div class="mapping-assignment-empty">
+        <span class="mapping-clear-icon" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="6"/><path d="m7.5 12 3 3 6-6"/></svg></span>
+        <strong>No locations waiting</strong>
+        <p>New OAuth locations will appear here until they have a verified branch mapping.</p>
+      </div>
+      @endif
+      <div class="mapping-panel-footer">@if($unassigned->isNotEmpty())<p>Check the configured store/location pair before running auto-map.</p>@endif<a class="admin-action" href="{{ route('admin.installations') }}">Review installations</a></div>
     </section>
 
-    <section class="mapping-panel mapping-section" id="mapping-activity" aria-labelledby="mapping-activity-title">
+    <section class="mapping-panel mapping-section mapping-history-panel" id="mapping-activity" aria-labelledby="mapping-activity-title">
       <div class="mapping-panel-heading"><div><p class="mapping-eyebrow">Mapping history</p><h2 id="mapping-activity-title" tabindex="-1">Recent decisions</h2></div><span class="mapping-history-label">Latest {{ $audit->count() }}</span></div>
       <p class="mapping-panel-intro">Automatic mapping decisions, recorded in UTC.</p>
       <div class="mapping-list-scroll" tabindex="0" role="region" aria-label="Recent mapping decisions">
         <ol class="mapping-activity-list">
           @forelse($audit as $entry)
             <li>
-              <div class="mapping-activity-title"><strong>{{ $entry->action === 'auto_verified' ? 'Pair verified automatically' : ucfirst(str_replace('_', ' ', $entry->action)) }}</strong><time datetime="{{ $entry->created_at?->toIso8601String() }}">{{ $entry->created_at?->utc()->format('M d, Y H:i') }} UTC</time></div>
-              <p><span class="mapping-id">{{ $entry->store ? 'Store '.$entry->store->store_id : 'Store unavailable' }}</span><span class="mapping-activity-separator" aria-hidden="true">/</span><span class="mapping-id">{{ $entry->connection?->location_id ?? 'Location unavailable' }}</span></p>
+              <time class="mapping-decision-time" datetime="{{ $entry->created_at?->toIso8601String() }}"><span>{{ $entry->created_at?->utc()->format('M d, Y') ?? 'Unknown date' }}</span><strong>{{ $entry->created_at?->utc()->format('H:i') ?? '—' }} <small>UTC</small></strong></time>
+              <div class="mapping-decision-body">
+                <div class="mapping-activity-title"><strong>{{ $entry->store?->name ?: ($entry->store ? 'Store '.$entry->store->store_id : 'Store unavailable') }}</strong><span class="mapping-decision-action {{ $entry->action === 'auto_verified' ? 'is-verified' : '' }}">{{ $entry->action === 'auto_verified' ? 'Verified automatically' : ucfirst(str_replace('_', ' ', $entry->action)) }}</span></div>
+                <dl class="mapping-decision-pair"><div><dt>Store</dt><dd>{{ $entry->store?->store_id ?? 'Unavailable' }}</dd></div><div><dt>Location</dt><dd>{{ $entry->connection?->location_id ?? 'Unavailable' }}</dd></div></dl>
+              </div>
             </li>
           @empty
             <li class="mapping-empty"><strong>No decisions recorded yet</strong><p>New mapping decisions will appear here after auto-map runs.</p></li>

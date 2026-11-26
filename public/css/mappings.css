@@ -1,5 +1,5 @@
 /* Branch routing: paired records, compact operations banner, quiet surfaces. */
-.mapping-page { --mapping-sticky-top: 0px; --mapping-toolbar-height: 78px; min-width: 0; color: var(--text); }
+.mapping-page { --mapping-sticky-top: 0px; --mapping-toolbar-height: var(--sticky-banner-height, 78px); min-width: 0; color: var(--text); }
 .mapping-page [hidden] { display: none !important; }
 .mapping-page :where(h1, h2, p, dl) { margin: 0; }
 .mapping-page h2 { color: var(--text-title); font-size: 21px; line-height: 1.3; letter-spacing: -.035em; font-weight: 800; }
@@ -104,26 +104,40 @@
 .mapping-pagination [data-mapping-page-count] { min-width: 64px; text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; }
 .mapping-page .mapping-route-note { margin-top: 12px; color: var(--text); font-size: 11px; }
 
-.mapping-support-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; gap: 20px; }
-.mapping-panel { padding: 22px; }
+.mapping-support-grid { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); margin-top: 30px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--clay-hi); box-shadow: 0 5px 16px rgba(36,34,38,.035); }
+.mapping-support-grid .mapping-panel { margin: 0; padding: 26px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.mapping-support-grid .mapping-assignment-panel { display: flex; flex-direction: column; border-radius: var(--radius-md) 0 0 var(--radius-md); border-right: 1px solid var(--border-subtle); }
+.mapping-support-grid .mapping-assignment-clear { background: color-mix(in srgb, var(--ok-bg) 32%, var(--clay-hi)); }
 .mapping-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .mapping-count { display: grid; place-items: center; min-width: 36px; height: 36px; padding: 6px; border-radius: 10px; background: var(--info-bg); color: var(--info-light); font-size: 17px; font-weight: 800; }
+.mapping-assignment-clear .mapping-count { color: var(--ok-light); background: var(--ok-bg); }
 .mapping-page .mapping-panel-intro { margin: 10px 0 18px; font-size: 12px; }
-.mapping-list-scroll { max-height: 380px; overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.mapping-list-scroll { max-height: 370px; overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.mapping-assignment-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 12px; padding: 28px 0 32px; border-top: 1px solid var(--border-subtle); }
+.mapping-clear-icon { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 4px; border: 1px solid color-mix(in srgb, var(--ok-light) 20%, transparent); border-radius: 16px; color: var(--ok-light); background: var(--ok-bg); }
+.mapping-assignment-empty strong { color: var(--text-title); font-size: 18px; line-height: 1.4; letter-spacing: -.025em; }
+.mapping-assignment-empty p { max-width: 300px; font-size: 12px; line-height: 1.8; }
 .mapping-location-list, .mapping-activity-list { list-style: none; padding: 0; margin: 0; }
 .mapping-location-list li { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 16px 0; border-top: 1px solid var(--border-subtle); }
 .mapping-location-list li > div { min-width: 0; }
 .mapping-location-list .badge { flex: none; }
-.mapping-panel-footer { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border-subtle); }
+.mapping-panel-footer { margin-top: auto; padding-top: 18px; border-top: 1px solid var(--border-subtle); }
 .mapping-panel-footer p { margin-bottom: 12px; max-width: 340px; font-size: 11px; }
 .mapping-history-label { flex: none; font-size: 10px; color: var(--text); }
-.mapping-activity-list li { position: relative; padding: 15px 0 15px 18px; border-top: 1px solid var(--border-subtle); }
-.mapping-activity-list li:not(.mapping-empty)::before { content: ''; position: absolute; left: 0; top: 22px; width: 6px; height: 6px; border-radius: 50%; background: var(--ghl-blue); }
+.mapping-activity-list li { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 18px; padding: 17px 0; border-top: 1px solid var(--border-subtle); }
+.mapping-decision-time { display: flex; flex-direction: column; gap: 5px; color: var(--text); font-size: 10px; font-variant-numeric: tabular-nums; }
+.mapping-decision-time strong { color: var(--text-title); font-size: 12px; font-weight: 650; }
+.mapping-decision-time small { color: var(--text); font-size: 9px; font-weight: 400; }
+.mapping-decision-body { min-width: 0; }
 .mapping-activity-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 5px 12px; }
-.mapping-activity-title strong { color: var(--text-title); font-size: 12px; font-weight: 700; }
-.mapping-activity-title time { color: var(--text); font-size: 10px; }
-.mapping-activity-list li > p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 9px; margin-top: 3px; }
-.mapping-activity-separator { color: var(--text-muted); }
+.mapping-activity-title > strong { color: var(--text-title); font-size: 13px; font-weight: 750; overflow-wrap: anywhere; }
+.mapping-decision-action { color: var(--text); font-size: 10px; font-weight: 600; }
+.mapping-decision-action.is-verified { color: var(--ok-light); }
+.mapping-decision-action.is-verified::before { content: '✓'; margin-inline-end: 5px; }
+.mapping-page .mapping-decision-pair { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 8px; }
+.mapping-decision-pair > div { display: flex; align-items: baseline; min-width: 0; gap: 6px; }
+.mapping-decision-pair dt { color: var(--text); font-size: 10px; }
+.mapping-decision-pair dd { min-width: 0; margin: 0; color: var(--text-title); font: 400 10px/1.7 var(--font-mono); overflow-wrap: anywhere; }
 .mapping-page .mapping-empty { display: table-cell; padding: 38px 22px; text-align: center; }
 .mapping-page li.mapping-empty { display: block; }
 .mapping-empty strong { display: block; font-size: 14px; color: var(--text-title); }
@@ -135,7 +149,13 @@
   .mapping-toolbar { gap: 8px; padding-inline: 18px; }
   .mapping-rule { display: none; }
   .mapping-hero { grid-template-columns: 1fr; }
-  .mapping-support-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 1100px) {
+  .mapping-support-grid { grid-template-columns: 1fr; }
+  .mapping-support-grid .mapping-assignment-panel { border-right: 0; border-bottom: 1px solid var(--border-subtle); border-radius: var(--radius-md) var(--radius-md) 0 0; }
+  .mapping-assignment-empty { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 5px 18px; padding: 24px 0; }
+  .mapping-clear-icon { grid-row: span 2; align-self: center; margin: 0; }
+  .mapping-assignment-empty p { max-width: 480px; }
 }
 @media (max-width: 1180px) {
   .mapping-route-table, .mapping-route-table tbody { display: block; }
@@ -145,7 +165,7 @@
   .mapping-route-table tbody :is(th, td)::before { content: attr(data-label); display: block; position: static; width: auto; height: auto; border: 0; border-radius: 0; margin-bottom: 9px; background: transparent; color: var(--text); font: 700 9px/1.4 var(--font-sans); letter-spacing: .06em; text-transform: uppercase; }
   .mapping-route-table tbody td[colspan] { grid-column: 1 / -1; }
 }
-@media (max-width: 900px) { .mapping-page { --mapping-sticky-top: var(--mapping-mobile-height, 65px); } }
+@media (max-width: 900px) { .mapping-page { --mapping-sticky-top: var(--sticky-topbar-height, 65px); } }
 @media (max-width: 1024px) { .mapping-search-field input { font-size: 16px; } }
 @media (max-width: 700px) {
   .mapping-hero { padding: 24px 20px 0; gap: 22px; }
@@ -164,9 +184,12 @@
   .mapping-filter-group { width: 100%; }
   .mapping-filter-group button { flex: 1; min-height: 42px; }
   .mapping-route-table tbody tr { padding: 20px 16px; gap: 18px; }
-  .mapping-support-grid { grid-template-columns: 1fr; gap: 0; }
-  .mapping-panel { padding: 20px; }
+  .mapping-support-grid .mapping-panel { padding: 20px; }
   .mapping-list-scroll { max-height: 360px; }
+  .mapping-activity-list li { grid-template-columns: 1fr; gap: 8px; }
+  .mapping-decision-time { flex-direction: row; align-items: baseline; gap: 8px; }
+  .mapping-activity-title { flex-direction: column; gap: 5px; }
+  .mapping-assignment-empty { grid-template-columns: 1fr; gap: 10px; }
   .mapping-pagination { padding: 14px 16px; justify-content: center; }
   .mapping-pagination p { width: 100%; text-align: center; }
   .mapping-page h2 { font-size: 20px; }

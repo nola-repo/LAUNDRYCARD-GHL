@@ -88,14 +88,7 @@
     if (frame) return;
     frame = requestAnimationFrame(() => { frame = null; updateNavigation(); });
   }
-  const mobileHeader = document.querySelector('.mobile-topbar');
-  const resize = new ResizeObserver(() => {
-    page.style.setProperty('--mapping-toolbar-height', `${toolbar.offsetHeight}px`);
-    page.style.setProperty('--mapping-mobile-height', `${mobileHeader?.offsetHeight || 0}px`);
-    scheduleNavigation();
-  });
-  resize.observe(toolbar);
-  if (mobileHeader) resize.observe(mobileHeader);
+  page.addEventListener('sticky-banner-resize', scheduleNavigation);
   window.addEventListener('scroll', scheduleNavigation, { passive: true });
   window.addEventListener('hashchange', scheduleNavigation);
   updateNavigation();

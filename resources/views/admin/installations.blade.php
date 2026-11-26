@@ -4,9 +4,12 @@
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/installations.css') }}?v={{ filemtime(public_path('css/installations.css')) }}">
 @endpush
+@push('scripts')
+<script src="{{ asset('js/sticky-banner.js') }}?v={{ filemtime(public_path('js/sticky-banner.js')) }}" defer></script>
+@endpush
 
 @section('content')
-<div class="oauth-page">
+<div class="oauth-page" data-sticky-page>
   @if(session('flash_success'))
     <div class="notice ok oauth-flash" role="status">{{ session('flash_success') }}</div>
   @endif
@@ -18,7 +21,7 @@
     $unmappedConns = $totalConns - $mappedConns;
   @endphp
 
-  <header class="oauth-hero">
+  <header class="oauth-hero" id="oauth-top">
     <div class="oauth-hero-top">
       <div class="oauth-hero-copy">
         <p class="oauth-eyebrow"><span aria-hidden="true"></span> Connection management · OAuth 2.0</p>
@@ -27,7 +30,14 @@
       </div>
     </div>
 
-    <div class="oauth-hero-bottom">
+    <p class="oauth-security-note">
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="18" height="11" rx="2"></rect><path d="M7 10V7a5 5 0 0 1 10 0v3"></path></svg>
+      <span>Tokens are encrypted at rest and never displayed.</span>
+    </p>
+  </header>
+
+  <div class="oauth-toolbar" data-sticky-banner>
+      <a class="oauth-toolbar-title" href="#oauth-top">OAuth installations</a>
       <div class="oauth-actions" role="group" aria-label="OAuth installation actions">
         <button type="button" class="btn oauth-btn oauth-btn-secondary" data-open-refresh-dialog aria-label="Refresh all tokens">
           <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M5.6 9A7 7 0 0 1 17 6l3 6M4 12l3 6a7 7 0 0 0 11.4-3"></path></svg>
@@ -46,14 +56,8 @@
           <span>Connect location</span>
         </a>
       </div>
-      <p class="oauth-security-note">
-        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="18" height="11" rx="2"></rect><path d="M7 10V7a5 5 0 0 1 10 0v3"></path></svg>
-        <span>Tokens are encrypted at rest and never displayed.</span>
-      </p>
-    </div>
-  </header>
-
-  <div class="oauth-copy-status" id="oauth-copy-status" role="status" aria-live="polite" hidden></div>
+      <div class="oauth-copy-status" id="oauth-copy-status" role="status" aria-live="polite" hidden></div>
+  </div>
 
   <section class="oauth-section" aria-labelledby="oauth-connections-heading">
     <div class="oauth-section-head">
