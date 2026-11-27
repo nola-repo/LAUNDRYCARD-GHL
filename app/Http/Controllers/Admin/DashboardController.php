@@ -4,18 +4,23 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\BranchMapping;
-use App\Models\ContactMapping;
 use App\Models\GhlConnection;
 use App\Models\IntegrationEvent;
 use App\Models\LaundrycardSourceRecord as Rec;
 use App\Models\LaundrycardStore;
+use App\Models\LaundrycardTransaction;
 use App\Models\MappingAuditLog;
 use App\Models\SyncAttempt;
 use App\Models\SyncRun;
 use App\Services\BranchMappingService;
 use App\Services\HighLevelOAuthService;
 use App\Services\LaundryCardClient;
+use App\Support\CustomerRecordsCsv;
+use App\Support\Normalizer;
+use App\Support\Sanitizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class DashboardController extends Controller
 {
@@ -199,63 +204,27 @@ class DashboardController extends Controller
     /** Stream export of filtered customer records to CSV. */
     public function exportRecords(Request $request)
     {
+        $validated = $request->validate([
+            'customize' => ['sometimes', 'in:1'],
+            'columns' => [$request->has('customize') ? 'required' : 'sometimes', 'array', 'min:1', 'max:'.count(CustomerRecordsCsv::COLUMNS)],
+            'columns.*' => ['required', 'string', 'distinct', Rule::in(array_keys(CustomerRecordsCsv::COLUMNS))],
+        ]);
+        // An uncustomized URL retains the existing full CSV schema.
+        $columns = array_values(array_intersect(array_keys(CustomerRecordsCsv::COLUMNS), $validated['columns'] ?? array_keys(CustomerRecordsCsv::COLUMNS)));
+        $headers = array_map(fn ($key) => CustomerRecordsCsv::COLUMNS[$key], $columns);
         $q = $this->buildRecordsQuery($request);
-        $filename = 'customer-records-' . now()->format('Y-m-d') . '.csv';
+        $filename = 'customer-records-'.now()->format('Y-m-d').'.csv';
 
-        return response()->streamDownload(function () use ($q) {
+        return response()->streamDownload(function () use ($q, $columns, $headers) {
             $handle = fopen('php://output', 'w');
-            fputs($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+            fwrite($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
 
-            fputcsv($handle, [
-                'Card Number',
-                'Store ID',
-                'Store Name',
-                'First Name',
-                'Last Name',
-                'Customer Full Name',
-                'Email',
-                'Phone',
-                'Current Balance',
-                'Classification',
-                'Eligibility Status',
-                'Eligibility Reason',
-                'Processing Status',
-                'Hold Reason',
-                'Reload Count',
-                'Reload Total ($)',
-                'GHL Location ID',
-                'GHL Contact ID',
-                'First Observed (UTC)',
-                'Last Observed (UTC)',
-                'Synced At (UTC)',
-            ]);
+            fputcsv($handle, $headers);
 
-            $q->chunk(500, function ($records) use ($handle) {
+            $q->chunk(500, function ($records) use ($handle, $columns) {
                 foreach ($records as $r) {
-                    [$first, $last] = \App\Support\Normalizer::splitName($r->customer_name);
-                    fputcsv($handle, [
-                        $r->card_number,
-                        $r->store->store_id ?? '',
-                        $r->store->name ?? '',
-                        $first ?? '',
-                        $last ?? '',
-                        $r->customer_name ?? '',
-                        $r->customer_email ?? '',
-                        $r->customer_phone ?? '',
-                        $r->balance !== null ? number_format((float) $r->balance, 2, '.', '') : '',
-                        $r->classification ?? '',
-                        $r->eligibility_status ?? '',
-                        $r->eligibility_reason ?? '',
-                        $r->processing_status ?? '',
-                        $r->hold_reason ?? '',
-                        $r->reload_count ?? 0,
-                        $r->reload_total !== null ? number_format((float) $r->reload_total, 2, '.', '') : '0.00',
-                        $r->destination_location_id ?? ($r->connection?->location_id ?? ''),
-                        $r->contactMapping?->ghl_contact_id ?? '',
-                        $r->first_observed_at?->toIso8601String() ?? '',
-                        $r->last_observed_at?->toIso8601String() ?? '',
-                        $r->synced_at?->toIso8601String() ?? '',
-                    ]);
+                    $values = CustomerRecordsCsv::values($r);
+                    fputcsv($handle, array_map(fn ($key) => $values[$key], $columns));
                 }
             });
 
@@ -344,7 +313,7 @@ class DashboardController extends Controller
             'stores' => LaundrycardStore::orderBy('store_id')->get(),
             'summary' => $summary,
             'record' => $record,
-            'totalStored' => \App\Models\LaundrycardTransaction::count(),
+            'totalStored' => LaundrycardTransaction::count(),
         ]);
     }
 
@@ -352,11 +321,11 @@ class DashboardController extends Controller
     public function exportTransactions(Request $request)
     {
         $q = $this->buildTransactionsQuery($request);
-        $filename = 'credit-history-' . now()->format('Y-m-d') . '.csv';
+        $filename = 'credit-history-'.now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($q) {
             $handle = fopen('php://output', 'w');
-            fputs($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
+            fwrite($handle, "\xEF\xBB\xBF"); // UTF-8 BOM for Excel
 
             fputcsv($handle, [
                 'Transaction ID',
@@ -380,7 +349,7 @@ class DashboardController extends Controller
             $q->chunk(500, function ($transactions) use ($handle) {
                 foreach ($transactions as $t) {
                     $name = $t->sourceRecord?->customer_name;
-                    [$first, $last] = \App\Support\Normalizer::splitName($name);
+                    [$first, $last] = Normalizer::splitName($name);
                     $info = is_array($t->raw_payload) ? ($t->raw_payload['AdditionalInfo'] ?? '') : '';
 
                     fputcsv($handle, [
@@ -413,7 +382,7 @@ class DashboardController extends Controller
 
     private function buildTransactionsQuery(Request $request)
     {
-        $q = \App\Models\LaundrycardTransaction::with(['store', 'sourceRecord'])->latest('occurred_at')->latest('id');
+        $q = LaundrycardTransaction::with(['store', 'sourceRecord'])->latest('occurred_at')->latest('id');
 
         $card = trim((string) $request->query('card'));
         if ($card !== '') {
@@ -557,9 +526,9 @@ class DashboardController extends Controller
                 ->map(fn (Rec $record) => [
                     'store_id' => $record->store?->store_id ?? '—',
                     'card_number' => substr($record->card_number, 0, 2).'••••'.substr($record->card_number, -2),
-                    'customer_name' => $record->customer_name ? \Illuminate\Support\Str::limit($record->customer_name, 1, '').'***' : '—',
-                    'customer_email' => \App\Support\Sanitizer::maskEmail($record->customer_email),
-                    'customer_phone' => \App\Support\Sanitizer::maskPhone($record->customer_phone),
+                    'customer_name' => $record->customer_name ? Str::limit($record->customer_name, 1, '').'***' : '—',
+                    'customer_email' => Sanitizer::maskEmail($record->customer_email),
+                    'customer_phone' => Sanitizer::maskPhone($record->customer_phone),
                     'balance' => $record->balance !== null ? '$'.number_format((float) $record->balance, 2) : 'unknown',
                     'eligibility' => $record->eligibility_status,
                     'classification' => $record->classification,

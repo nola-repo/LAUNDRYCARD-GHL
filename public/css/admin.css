@@ -117,6 +117,12 @@
 
   /* Layout & Motion */
   --sidebar-width: 260px;
+  --admin-page-width: 1540px;
+  --admin-title-size: clamp(28px, 2.8vw, 36px);
+  --admin-heading-size: 20px;
+  --admin-panel-padding: 24px;
+  --admin-control-height: 44px;
+  --admin-control-radius: 11px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --transition: 0.22s var(--ease);
 }

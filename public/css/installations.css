@@ -3,7 +3,7 @@
   --oauth-panel: var(--clay-hi);
   --oauth-line: var(--border-subtle);
   --oauth-sticky-top: 0px;
-  max-width: 1540px;
+  max-width: var(--admin-page-width);
   margin-inline: auto;
 }
 .oauth-page [hidden] { display: none !important; }
@@ -52,8 +52,9 @@
 .oauth-hero-copy h1 {
   margin: 0;
   color: #fff;
-  font-size: clamp(25px, 3vw, 34px);
-  letter-spacing: -.04em;
+  font-size: var(--admin-title-size);
+  line-height: 1.15;
+  letter-spacing: -.05em;
 }
 .oauth-hero-copy > p:last-child {
   margin: 8px 0 0;
@@ -116,10 +117,10 @@
   gap: 8px;
 }
 .oauth-page .oauth-btn {
-  min-height: 38px;
-  padding: 9px 13px;
-  border-radius: 10px;
-  font-size: 11.5px;
+  min-height: var(--admin-control-height);
+  padding: 10px 15px;
+  border-radius: var(--admin-control-radius);
+  font-size: 12px;
   font-weight: 700;
   box-shadow: none;
   transition: color .16s ease, background .16s ease, border-color .16s ease, transform .16s ease;
@@ -272,7 +273,7 @@
 .oauth-section-head h2 {
   margin: 0;
   color: var(--text-title);
-  font-size: 19px;
+  font-size: var(--admin-heading-size);
   letter-spacing: -.03em;
 }
 .oauth-section-head p:last-child {
@@ -567,7 +568,7 @@
 .oauth-confirm-dialog h2 {
   margin: 0;
   color: var(--text-title);
-  font-size: 19px;
+  font-size: var(--admin-heading-size);
   letter-spacing: -.03em;
 }
 .oauth-confirm-dialog p {

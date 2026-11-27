@@ -2,246 +2,49 @@
 @section('title','Credit History')
 @section('content')
 @php
-  $typeLabels = [
-    'reload' => 'Reload',
-    'bonus' => 'Bonus',
-    'vend' => 'Machine Use',
-    'adjustment' => 'Adjustment',
-    'unknown' => 'Other'
-  ];
-  $typeBadge = [
-    'reload' => 'b-ok',
-    'bonus' => 'b-info',
-    'vend' => 'b-mute',
-    'adjustment' => 'b-warn',
-    'unknown' => 'b-mute'
-  ];
-  $typeIcon = [
-    'reload' => 'metric-icon--emerald',
-    'bonus' => 'metric-icon--cyan',
-    'vend' => 'metric-icon--violet',
-    'unknown' => 'metric-icon--amber'
-  ];
+  $typeLabels = ['reload' => 'Reload', 'bonus' => 'Bonus', 'vend' => 'Machine use', 'adjustment' => 'Adjustment', 'unknown' => 'Other'];
+  $typeBadge = ['reload' => 'b-ok', 'bonus' => 'b-info', 'vend' => 'b-mute', 'adjustment' => 'b-warn', 'unknown' => 'b-mute'];
+  $filtered = collect(request()->only(['card','store','type','from','to']))->contains(fn($value) => filled($value));
 @endphp
-
-<div class="page-head">
-  <div>
-    <span class="page-kicker">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
-      Transaction Ledger
-    </span>
-    <h1>Credit History</h1>
-    <p class="sub">Card reloads, bonuses, and machine usage pulled from LaundryCard <code>/api/transact</code>. {{ number_format($totalStored) }} transactions stored in total.</p>
-  </div>
-  <div class="btn-row">
-    <a href="{{ route('admin.transactions.export', request()->query()) }}" class="btn" title="Export matching filtered transactions to CSV">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-      <span>Export CSV</span>
-    </a>
-  </div>
-</div>
-
-@if($record)
-<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-  <div style="display:flex;align-items:center;gap:14px">
-    <div class="metric-icon metric-icon--violet">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
-    </div>
-    <div>
-      <h2 style="margin:0">Card <span class="card-mono">{{ $record->card_number }}</span></h2>
-      <div class="muted" style="font-size:12.5px;margin-top:3px">
-        Store #{{ $record->store->store_id ?? '' }} ({{ $record->store->name ?? '' }})
-        @if($record->customer_name) · <strong>{{ ucwords(strtolower($record->customer_name)) }}</strong> @endif
+<x-admin-workspace title="Credit history" eyebrow="LaundryCard · Transaction ledger" description="Trace card reloads, bonuses, adjustments, and machine use across your branches.">
+  <x-slot:context><strong>{{ number_format($totalStored) }} stored transactions</strong>Amounts below reflect the applied filters.</x-slot:context>
+  <x-slot:navigation><a href="#ledger-summary">Amounts</a><a href="#workspace-results">Transactions</a></x-slot:navigation>
+  <x-slot:actions><a class="admin-action" href="{{ route('admin.records') }}">Customer records</a><a class="admin-action admin-action-primary" href="{{ route('admin.transactions.export', request()->except(['page'])) }}">Export filtered CSV</a></x-slot:actions>
+  @if($record)
+    <aside class="workspace-card-context" aria-label="Card context"><div><span class="workspace-kicker">Card context</span><h2>{{ $record->card_number }}</h2><p class="workspace-note">{{ $record->store?->name ?? 'Store unavailable' }} · Store {{ $record->store?->store_id ?? 'unavailable' }}@if($record->customer_name) · {{ ucwords(strtolower($record->customer_name)) }}@endif</p></div><div><span class="workspace-caption">Current card balance</span><strong class="workspace-money"><x-workspace-amount :value="$record->balance" empty="Pending"/></strong></div></aside>
+  @endif
+  <section id="ledger-summary" aria-labelledby="ledger-summary-title"><div class="workspace-section-head"><div><span class="workspace-kicker">Filtered activity</span><h2 id="ledger-summary-title">Where the credit moved</h2></div><p>Totals across all matching pages</p></div>
+    <dl class="workspace-stats">@foreach($typeLabels as $key => $label)<div class="{{ $key === 'reload' ? 'workspace-stat-positive' : ($key === 'bonus' ? 'workspace-stat-bonus' : '') }}"><dt>{{ $label }}</dt><dd>${{ number_format($summary[$key]['total'] ?? 0, 2) }}</dd><small>{{ number_format($summary[$key]['n'] ?? 0) }} transactions</small></div>@endforeach</dl>
+  </section>
+  <section class="workspace-panel" aria-labelledby="workspace-results">
+    <form class="workspace-filters" method="get" action="{{ route('admin.transactions') }}" data-workspace-form novalidate>
+      <div class="workspace-filter-grid">
+        <x-workspace-search name="card" label="Card number" placeholder="Find a card"/>
+        <div class="workspace-field"><label for="ledger-store">Store branch</label><select id="ledger-store" name="store"><option value="">All stores</option>@foreach($stores as $store)<option value="{{ $store->store_id }}" @selected(request('store') === $store->store_id)>{{ $store->store_id }} · {{ $store->name }}</option>@endforeach</select></div>
+        <div class="workspace-field"><label for="ledger-type">Transaction type</label><select id="ledger-type" name="type"><option value="">All types</option>@foreach($typeLabels as $key => $label)<option value="{{ $key }}" @selected(request('type') === $key)>{{ $label }}</option>@endforeach</select></div>
+        <fieldset class="workspace-field workspace-dates"><legend>Transaction dates · UTC</legend><div><label class="workspace-sr-only" for="ledger-from">From date</label><input id="ledger-from" type="date" name="from" value="{{ request('from') }}"><label class="workspace-sr-only" for="ledger-to">To date</label><input id="ledger-to" type="date" name="to" value="{{ request('to') }}"></div></fieldset>
       </div>
-    </div>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px">
-    <span class="muted" style="font-size:12px;font-weight:600">Current Balance:</span>
-    <span class="balance-pill {{ (float)$record->balance > 0 ? 'bal-pos' : 'bal-zero' }}">
-      {{ $record->balance === null ? 'unknown' : '$'.number_format((float) $record->balance, 2) }}
-    </span>
-  </div>
-</div>
-@endif
-
-<div class="metric-row">
-  @foreach(['reload','bonus','vend','unknown'] as $k)
-  <div class="metric-box">
-    <div class="metric-box-top">
-      <span class="metric-lbl">{{ $typeLabels[$k] }}</span>
-      <div class="metric-icon {{ $typeIcon[$k] ?? 'metric-icon--violet' }}">
-        @if($k === 'reload')
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-        @elseif($k === 'bonus')
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-        @elseif($k === 'vend')
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-        @else
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-        @endif
-      </div>
-    </div>
-    <div class="metric-num">${{ number_format($summary[$k]['total'] ?? 0, 2) }}</div>
-    <div class="metric-sub">{{ number_format($summary[$k]['n'] ?? 0) }} transactions</div>
-  </div>
-  @endforeach
-</div>
-
-<div class="filter-panel">
-  <div class="filter-title">
-    <h3>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-      Filter Transactions
-    </h3>
-    <span class="muted" style="font-size:12px">Filter by card number, branch, transaction type, or date window</span>
-  </div>
-
-  <form method="get" action="{{ route('admin.transactions') }}">
-    <div class="filter-grid">
-      <div class="filter-group">
-        <label class="filter-label">
-          <span>Card Number</span>
-          <span class="filter-hint">Search #</span>
-        </label>
-        <input type="text" name="card" value="{{ request('card') }}" placeholder="e.g. 100234...">
-      </div>
-      <div class="filter-group">
-        <label class="filter-label">
-          <span>Store Branch</span>
-          <span class="filter-hint">Location</span>
-        </label>
-        <select name="store">
-          <option value="">All stores</option>
-          @foreach($stores as $s)
-            <option value="{{ $s->store_id }}" @selected(request('store') === $s->store_id)>Store {{ $s->store_id }} — {{ $s->name }}</option>
-          @endforeach
-        </select>
-      </div>
-      <div class="filter-group">
-        <label class="filter-label">
-          <span>Transaction Type</span>
-          <span class="filter-hint">Category</span>
-        </label>
-        <select name="type">
-          <option value="">All types</option>
-          @foreach($typeLabels as $k => $l)
-            <option value="{{ $k }}" @selected(request('type') === $k)>{{ $l }}</option>
-          @endforeach
-        </select>
-      </div>
-      <div class="filter-group">
-        <label class="filter-label">
-          <span>Date Window</span>
-          <span class="filter-hint">From &amp; To</span>
-        </label>
-        <div class="filter-dates">
-          <input type="date" name="from" value="{{ request('from') }}">
-          <input type="date" name="to" value="{{ request('to') }}">
-        </div>
-      </div>
-    </div>
-    <div class="filter-bar-footer">
-      <div class="filter-buttons">
-        <button type="submit" class="btn primary">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <span>Apply Filters</span>
-        </button>
-        <a class="btn" href="{{ route('admin.transactions') }}">Reset</a>
-        <a class="btn" href="{{ route('admin.transactions.export', request()->query()) }}" title="Download filtered entries as CSV">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          <span>Export CSV</span>
-        </a>
-      </div>
-      <div class="muted" style="font-size:12px">
-        Showing <strong>{{ $transactions->firstItem() ?? 0 }}–{{ $transactions->lastItem() ?? 0 }}</strong> of <strong>{{ number_format($transactions->total()) }}</strong> entries
-      </div>
-    </div>
-  </form>
-</div>
-
-<div class="table-card">
-  <div class="table-scroll">
-    <table class="records-table">
-      <thead>
-        <tr>
-          <th>When (UTC)</th>
-          <th>Store</th>
-          <th>Card #</th>
-          <th>First Name</th>
-          <th>Last Name</th>
-          <th>Type</th>
-          <th>Amount</th>
-          <th>Balance After</th>
-          <th>Machine</th>
-          <th>Detail</th>
-        </tr>
-      </thead>
-      <tbody>
-      @forelse($transactions as $t)
-        @php
-          $info = is_array($t->raw_payload) ? ($t->raw_payload['AdditionalInfo'] ?? '') : '';
-          $tt = $t->transaction_type ?? 'unknown';
-          $custName = $t->sourceRecord?->customer_name;
-          [$first, $last] = \App\Support\Normalizer::splitName($custName);
-        @endphp
-        <tr>
-          <td style="font-weight:600;color:var(--text-title)">{{ $t->occurred_at->format('M d, Y H:i:s') }}</td>
-          <td><span class="store-id-pill">#{{ $t->store->store_id ?? '' }}</span></td>
-          <td><a class="card-mono" href="{{ route('admin.transactions', ['card' => $t->card_number]) }}">{{ $t->card_number }}</a></td>
-          <td style="font-weight:600;color:var(--text-title)">
-            @if($first)
-              {{ ucwords(strtolower($first)) }}
-            @else
-              <span class="muted">—</span>
-            @endif
-          </td>
-          <td style="font-weight:600;color:var(--text-title)">
-            @if($last)
-              {{ ucwords(strtolower($last)) }}
-            @else
-              <span class="muted">—</span>
-            @endif
-          </td>
-          <td>
-            <span class="badge {{ $typeBadge[$tt] ?? 'b-mute' }}">{{ $typeLabels[$tt] ?? $tt }}</span>
-            @if($tt === 'unknown')
-              <span class="muted mono" style="font-size:10.5px;margin-left:4px">code {{ $t->transaction_type_raw }}</span>
-            @endif
-          </td>
-          <td style="font-weight:700;color:var(--text-title)">{{ $t->amount === null ? '—' : '$'.number_format((float) $t->amount, 2) }}</td>
-          <td>
-            @if($t->balance_after === null)
-              <span class="muted">—</span>
-            @else
-              <span class="balance-pill {{ (float)$t->balance_after > 0 ? 'bal-pos' : 'bal-zero' }}">
-                ${{ number_format((float) $t->balance_after, 2) }}
-              </span>
-            @endif
-          </td>
-          <td class="mono">{{ $t->mach_no ?? '—' }}</td>
-          <td class="muted" style="font-size:11.5px">{{ preg_match('/^[01]+$/', (string) $info) ? '' : \Illuminate\Support\Str::limit((string) $info, 40) }}</td>
-        </tr>
-      @empty
-        <tr>
-          <td colspan="10">
-            <div class="empty-state-box">
-              <div class="empty-state-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
-              </div>
-              <div class="empty-state-text">No transactions stored yet</div>
-              <p class="muted" style="font-size:12.5px;margin-top:6px">
-                Run <code>php artisan integration:ingest-transactions --backfill-hours=72</code> to populate transaction history.
-              </p>
-            </div>
-          </td>
-        </tr>
-      @endforelse
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div class="pagination-wrapper">
-  <div class="pager">{{ $transactions->links() }}</div>
-</div>
+      <p class="workspace-form-error" id="ledger-filter-error" data-form-error role="alert" hidden></p>
+      <div class="workspace-filter-footer"><div><button class="admin-action admin-action-primary" type="submit"><span>Apply filters</span></button><a class="admin-action" href="{{ route('admin.transactions') }}">Reset all</a></div><p>CSV exports include all matching pages using your applied filters.</p></div>
+    </form>
+    <div class="workspace-panel-head"><div><h2 id="workspace-results" tabindex="-1">Transaction ledger</h2><p>Newest activity first · All times in UTC</p></div><span class="workspace-count">{{ number_format($transactions->total()) }} matches</span></div>
+    <div class="workspace-table-wrap"><table class="workspace-table workspace-table--ledger"><caption class="workspace-sr-only">Card transactions and balance history</caption><thead><tr><th scope="col">Card / customer</th><th scope="col">Branch</th><th scope="col">Activity</th><th scope="col">Amount / balance</th><th scope="col">Recorded · UTC</th><th scope="col">Machine / detail</th></tr></thead><tbody>
+    @forelse($transactions as $transaction)
+      @php
+        $type = $transaction->transaction_type ?? 'unknown';
+        $info = is_array($transaction->raw_payload) ? ($transaction->raw_payload['AdditionalInfo'] ?? '') : '';
+        [$first, $last] = \App\Support\Normalizer::splitName($transaction->sourceRecord?->customer_name);
+      @endphp
+      <tr><th scope="row" data-label="Card / customer"><a class="workspace-link workspace-mono" href="{{ route('admin.transactions', ['card' => $transaction->card_number, 'store' => $transaction->store?->store_id]) }}">{{ $transaction->card_number }}</a><p class="workspace-note">@if($first || $last)<span aria-label="First Name">{{ ucwords(strtolower($first ?? '')) }}</span> <span aria-label="Last Name">{{ ucwords(strtolower($last ?? '')) }}</span>@else Anonymous card @endif</p></th>
+        <td data-label="Branch"><strong>{{ $transaction->store?->name ?? 'Store unavailable' }}</strong><span class="workspace-id">Store {{ $transaction->store?->store_id ?? 'unavailable' }}</span></td>
+        <td data-label="Activity"><span class="badge {{ $typeBadge[$type] ?? 'b-mute' }}">{{ $typeLabels[$type] ?? $type }}</span>@if($type === 'unknown')<span class="workspace-note">Source code {{ $transaction->transaction_type_raw ?? 'unavailable' }}</span>@endif</td>
+        <td data-label="Amount / balance"><span class="workspace-money"><x-workspace-amount :value="$transaction->amount"/></span><p class="workspace-note">Balance after <strong><x-workspace-amount :value="$transaction->balance_after"/></strong></p></td>
+        <td data-label="Recorded · UTC"><x-workspace-time :value="$transaction->occurred_at"/></td>
+        <td data-label="Machine / detail"><span class="workspace-mono">{{ $transaction->mach_no ? 'Machine '.$transaction->mach_no : 'No machine recorded' }}</span>@if(filled($info) && !preg_match('/^[01]+$/', (string)$info))<details class="workspace-disclosure"><summary>Transaction detail</summary><p class="workspace-note">{{ $info }}</p></details>@endif</td>
+      </tr>
+    @empty<tr class="workspace-empty-row"><td colspan="6"><x-workspace-empty :title="$filtered ? 'No transactions match these filters' : 'No transactions recorded yet'" :description="$filtered ? 'Try another card, branch, or date range.' : 'Reloads and machine activity will appear after transaction discovery runs.'" :reset="$filtered ? route('admin.transactions') : null"/></td></tr>@endforelse
+    </tbody></table></div>
+    <footer class="workspace-pagination"><p>{{ $transactions->firstItem() ?? 0 }}–{{ $transactions->lastItem() ?? 0 }} of {{ number_format($transactions->total()) }} transactions</p><div class="pager">{{ $transactions->links() }}</div></footer>
+  </section>
+</x-admin-workspace>
 @endsection

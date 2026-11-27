@@ -1,0 +1,23 @@
+/* Authorization receipts use the same brand, controls and surface tokens. */
+body.oauth-result-page { min-height: 100svh; display: grid; place-items: center; margin: 0; padding: 32px 20px; background: var(--bg-canvas); color: var(--text); }
+.oauth-result { width: min(100%,560px); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--clay-hi); box-shadow: 0 16px 48px rgba(36,34,38,.1); overflow: hidden; }
+.oauth-result header { padding: 26px 30px; background: var(--text-title); color: var(--clay-hi); border-bottom: 3px solid var(--accent); }
+.oauth-result header svg { display: block; width: min(100%,280px); height: auto; }
+.oauth-result header p { margin: 14px 0 0; color: var(--clay-lo); font-size: 11px; }
+.oauth-result-body { padding: 30px; }
+.oauth-result-mark { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 20px; border: 1px solid currentColor; border-radius: 14px; font-size: 25px; font-weight: 700; }
+.oauth-result-mark.is-success { color: var(--ok-light); background: var(--ok-bg); }
+.oauth-result-mark.is-error { color: var(--bad-light); background: var(--bad-bg); }
+.oauth-result h1 { margin: 0 0 14px; color: var(--text-title); font-size: 28px; line-height: 1.2; letter-spacing: -.045em; }
+.oauth-result-message { margin: 0; color: var(--text-title); font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.oauth-result-next { margin: 12px 0 24px; font-size: 12px; line-height: 1.8; }
+.oauth-result-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.oauth-result footer { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 18px 30px; border-top: 1px dashed var(--border-medium); font-size: 10px; }
+.oauth-result footer time { font-variant-numeric: tabular-nums; }
+.oauth-result-debug { margin-bottom: 20px; }
+.oauth-result-debug summary { color: var(--accent-hover); cursor: pointer; font-size: 12px; }
+.oauth-result-debug summary:hover { text-decoration: underline; }
+.oauth-result-debug pre { padding: 14px; background: var(--clay); border-radius: 9px; font: 400 10px/1.8 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.oauth-result :is(a,summary):focus-visible { outline: 3px solid var(--accent-light); outline-offset: 3px; }
+@media(max-width:520px) { .oauth-result header, .oauth-result-body { padding: 24px; } .oauth-result footer { padding: 16px 24px; } .oauth-result-actions .admin-action { width: 100%; } .oauth-result h1 { font-size: 25px; } }
+@media(prefers-reduced-motion:reduce) { .oauth-result *, .oauth-result *::before, .oauth-result *::after { animation: none !important; transition: none !important; } }

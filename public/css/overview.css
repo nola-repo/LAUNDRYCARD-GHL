@@ -13,7 +13,7 @@
   --ov-wash-green: #edf8f2;
   --ov-gap: clamp(16px, 1.8vw, 24px);
   --ov-pad: clamp(16px, 1.8vw, 24px);
-  max-width: 1540px;
+  max-width: var(--admin-page-width);
   margin-inline: auto;
   display: grid;
   gap: var(--ov-gap);

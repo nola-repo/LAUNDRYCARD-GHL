@@ -1,152 +1,26 @@
 @extends('layouts.app')
 @section('title','API Activity')
 @section('content')
-
-<div class="page-head">
-  <div>
-    <span class="page-kicker">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-      System Diagnostics
-    </span>
-    <h1>API Activity</h1>
-    <p class="sub">Persisted request outcomes, discovery executions, and read-only preflight inspection tools. Admin access is monitoring only.</p>
-  </div>
-
-  <div class="btn-row">
-    <form method="POST" action="{{ route('admin.developer.sync-preview') }}" style="margin:0">
-      @csrf
-      <button type="submit" class="btn primary">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-        <span>Sync Preflight Check</span>
-      </button>
-    </form>
-
-    <form method="POST" action="{{ route('admin.developer.sync-dry-run') }}" style="margin:0">
-      @csrf
-      <input type="hidden" name="limit" value="10">
-      <button type="submit" class="btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-        <span>Simulate Dry-Run (10)</span>
-      </button>
-    </form>
-
-    <form method="POST" action="{{ route('admin.developer.config-diagnostics') }}" style="margin:0">
-      @csrf
-      <button type="submit" class="btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        <span>Config Diagnostics</span>
-      </button>
-    </form>
-  </div>
-</div>
-
-<div class="table-card">
-  <div class="table-card-header">
-    <div>
-      <h2>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-        Recent runs
-      </h2>
-      <span class="muted" style="font-size:12px">Latest scheduled and background synchronization batches</span>
+<x-admin-workspace title="API activity" eyebrow="LaundryCard · Integration operations" description="Inspect recent runs and request outcomes, then check readiness before the next sync.">
+  <x-slot:context><strong>Monitoring &amp; inspection</strong>Preflight tools help explain configuration and sync readiness.</x-slot:context>
+  <x-slot:navigation><a href="#api-tools">Inspection tools</a><a href="#api-runs">Recent runs</a><a href="#workspace-results">Requests</a></x-slot:navigation>
+  <x-slot:actions><a class="admin-action admin-action-primary" href="{{ route('admin.logs') }}">Integration logs</a></x-slot:actions>
+  <section id="api-tools" aria-labelledby="api-tools-title"><div class="workspace-section-head"><div><span class="workspace-kicker">Before the next sync</span><h2 id="api-tools-title">Inspection tools</h2></div><p>These checks do not create or update GHL contacts.</p></div>
+    <div class="workspace-panel workspace-tools">
+      <article class="workspace-tool"><span class="workspace-tool-mark" aria-hidden="true"></span><h3>Sync readiness</h3><p>Review connection, routing, and eligibility checks before a scheduled sync.</p><form method="post" action="{{ route('admin.developer.sync-preview') }}" data-workspace-form novalidate>@csrf<button type="submit" class="admin-action admin-action-primary"><span>Run preflight</span></button></form></article>
+      <article class="workspace-tool"><span class="workspace-tool-mark" aria-hidden="true"></span><h3>Preview 10 records</h3><p>See how up to ten records would be handled without sending contacts to GHL.</p><form method="post" action="{{ route('admin.developer.sync-dry-run') }}" data-workspace-form novalidate>@csrf<input type="hidden" name="limit" value="10"><button type="submit" class="admin-action"><span>Run dry-run</span></button></form></article>
+      <article class="workspace-tool"><span class="workspace-tool-mark" aria-hidden="true"></span><h3>Configuration</h3><p>Identify missing LaundryCard settings while keeping credentials hidden.</p><form method="post" action="{{ route('admin.developer.config-diagnostics') }}" data-workspace-form novalidate>@csrf<button type="submit" class="admin-action"><span>Check configuration</span></button></form></article>
     </div>
-    <span class="badge b-info">Last {{ $runs->count() }} Executions</span>
-  </div>
-
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Started</th>
-          <th>Type</th>
-          <th>Trigger</th>
-          <th>Mode</th>
-          <th>Status</th>
-          <th>Summary</th>
-        </tr>
-      </thead>
-      <tbody>
-        @forelse($runs as $run)
-        <tr>
-          <td style="font-weight:600;color:var(--text-title);white-space:nowrap">{{ $run->started_at?->toDayDateTimeString() }}</td>
-          <td><span class="card-mono">{{ $run->type }}</span></td>
-          <td><span class="tag-chip">{{ $run->trigger }}</span></td>
-          <td><x-badge :value="$run->mode"/></td>
-          <td><x-badge :value="$run->status"/></td>
-          <td class="mono" style="font-size:11.5px;max-width:460px;color:var(--text-muted)">
-            {{ \Illuminate\Support\Str::limit($run->error ?? json_encode(collect($run->stats ?? [])->except('stores')->all()), 180) }}
-          </td>
-        </tr>
-        @empty
-        <tr>
-          <td colspan="6" class="muted" style="text-align:center;padding:28px">No runs recorded.</td>
-        </tr>
-        @endforelse
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div class="table-card">
-  <div class="table-card-header">
-    <div>
-      <h2>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-        Sanitized request outcomes
-      </h2>
-      <span class="muted" style="font-size:12px">Request bodies and authorization headers are never stored</span>
-    </div>
-    <span class="badge b-ok">Redacted Stream</span>
-  </div>
-
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>System</th>
-          <th>Request</th>
-          <th>HTTP</th>
-          <th>Duration</th>
-          <th>Location / Store</th>
-        </tr>
-      </thead>
-      <tbody>
-        @forelse($diagnostics as $event)
-        <tr>
-          <td style="white-space:nowrap;font-weight:600;color:var(--text-title)">{{ $event->created_at->format('m-d H:i:s') }}</td>
-          <td><span class="terminal-stage-badge stage-api">{{ str_replace('api.','',$event->stage) }}</span></td>
-          <td class="mono" style="color:var(--text-title)">{{ $event->message }}</td>
-          <td>
-            @if($event->http_status)
-              <span class="badge {{ $event->http_status < 400 ? 'b-ok' : 'b-bad' }}">{{ $event->http_status }}</span>
-            @else
-              <span class="badge b-warn">timeout</span>
-            @endif
-          </td>
-          <td class="mono">
-            @if(isset($event->context['duration_ms']))
-              {{ $event->context['duration_ms'] }} ms
-            @else
-              <span class="muted">—</span>
-            @endif
-          </td>
-          <td class="mono">
-            @if($event->ghl_location_id)
-              <span class="card-mono">{{ $event->ghl_location_id }}</span>
-            @elseif($event->store_id)
-              <span class="store-id-pill">Store {{ $event->store_id }}</span>
-            @else
-              <span class="muted">—</span>
-            @endif
-          </td>
-        </tr>
-        @empty
-        <tr>
-          <td colspan="6" class="muted" style="text-align:center;padding:28px">No API calls recorded yet.</td>
-        </tr>
-        @endforelse
-      </tbody>
-    </table>
-  </div>
-</div>
+  </section>
+  <section class="workspace-section" id="api-runs" aria-labelledby="api-runs-title"><div class="workspace-section-head"><div><span class="workspace-kicker">Execution history</span><h2 id="api-runs-title">Recent runs</h2></div><p>Latest {{ $runs->count() }} executions · UTC</p></div><div class="workspace-panel">
+    @if($runs->isEmpty())<x-workspace-empty title="No runs recorded yet" description="Scheduled discovery and sync executions will appear here."/>
+    @else<ol class="workspace-run-list">@foreach($runs as $run)<li><div class="workspace-run-head"><h3>{{ str_replace('_',' ',$run->type) }}</h3><x-badge :value="$run->status"/></div><div class="workspace-run-meta"><x-workspace-time :value="$run->started_at"/><span>Trigger: {{ $run->trigger }}</span><x-badge :value="$run->mode"/></div>@if($run->error)<p class="workspace-alert" data-tone="error">{{ $run->error }}</p>@endif<details class="workspace-disclosure"><summary>Run summary</summary><pre>{{ json_encode(collect($run->stats ?? [])->except('stores')->all(), JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES) }}</pre></details></li>@endforeach</ol>@endif
+  </div></section>
+  <section class="workspace-section workspace-panel" aria-labelledby="workspace-results"><div class="workspace-panel-head"><div><h2 id="workspace-results" tabindex="-1">Request outcomes</h2><p>Latest {{ $diagnostics->count() }} recorded requests · Bodies and authorization headers are excluded</p></div></div>
+    <div class="workspace-table-wrap"><table class="workspace-table workspace-table--events"><caption class="workspace-sr-only">Sanitized API request outcomes</caption><thead><tr><th scope="col">Recorded · UTC</th><th scope="col">System / request</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Location / store</th></tr></thead><tbody>
+      @forelse($diagnostics as $event)<tr><td data-label="Recorded · UTC"><x-workspace-time :value="$event->created_at"/></td><th scope="row" class="workspace-event-main" data-label="System / request"><span class="workspace-kicker">{{ str_replace('api.','',$event->stage) }}</span><strong>{{ $event->message }}</strong></th><td data-label="Response">@if($event->http_status)<span class="badge {{ $event->http_status < 400 ? 'b-ok' : 'b-bad' }}">HTTP {{ $event->http_status }}</span>@else<span class="badge b-warn">No response</span>@endif @if($event->outcome)<span class="workspace-note">{{ ucwords(str_replace('_',' ',$event->outcome)) }}</span>@endif</td><td data-label="Duration"><span class="workspace-mono">{{ isset($event->context['duration_ms']) ? number_format($event->context['duration_ms']).' ms' : 'Not recorded' }}</span></td><td data-label="Location / store">@if($event->ghl_location_id)<span class="workspace-id">Location {{ $event->ghl_location_id }}</span>@endif @if($event->store_id)<strong>Store {{ $event->store_id }}</strong>@endif @if(!$event->ghl_location_id && !$event->store_id)<span class="workspace-note">Not recorded</span>@endif</td></tr>
+      @empty<tr class="workspace-empty-row"><td colspan="5"><x-workspace-empty title="No API requests recorded yet" description="Request outcomes will appear when the integration contacts LaundryCard or GoHighLevel."/></td></tr>@endforelse
+    </tbody></table></div>
+  </section>
+</x-admin-workspace>
 @endsection

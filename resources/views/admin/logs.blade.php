@@ -1,170 +1,32 @@
 @extends('layouts.app')
 @section('title','Integration Logs')
 @section('content')
-
-<div class="page-head">
-  <div>
-    <span class="page-kicker">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-      Audit &amp; Telemetry
-    </span>
-    <h1>Integration Logs</h1>
-    <p class="sub">Structured and sanitized event stream. Tokens and credentials are redacted; personal data is masked before storage.</p>
-  </div>
-</div>
-
-<div class="filter-panel">
-  <div class="filter-title">
-    <h3>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-      Filter Telemetry Events
-    </h3>
-    <span class="muted" style="font-size:12px">Click any correlation prefix in the table to isolate a single execution trace</span>
-  </div>
-
-  <form method="get" action="{{ route('admin.logs') }}">
-    <div class="filter-grid">
-      <div class="filter-group" style="grid-column: span 2">
-        <label class="filter-label">
-          <span>Search Query</span>
-          <span class="filter-hint">Correlation / Message</span>
-        </label>
-        <input name="q" value="{{ request('q') }}" placeholder="Search correlation id, store, location, message…">
+@php($filtered = collect(request()->only(['q','level','stage','outcome']))->contains(fn($value) => filled($value)))
+<x-admin-workspace title="Integration logs" eyebrow="LaundryCard · Execution history" description="Follow discovery, routing, and sync events through each execution trace.">
+  <x-slot:context><strong>Sanitized event history</strong>Credentials are redacted and personal data is masked before storage.</x-slot:context>
+  <x-slot:navigation><a href="#workspace-results">Event stream</a></x-slot:navigation>
+  <x-slot:actions><a class="admin-action" href="{{ route('admin.developer') }}">API activity</a><a class="admin-action admin-action-primary" href="{{ route('admin.failed') }}">Failed activity</a></x-slot:actions>
+  <section class="workspace-panel" aria-labelledby="workspace-results">
+    <form class="workspace-filters" method="get" action="{{ route('admin.logs') }}" data-workspace-form novalidate>
+      <div class="workspace-filter-grid workspace-filter-grid--logs">
+        <x-workspace-search name="q" label="Search events" placeholder="Trace, branch, location, or message"/>
+        <div class="workspace-field"><label for="logs-level">Severity</label><select name="level" id="logs-level"><option value="">Any level</option>@foreach(['info','warning','error'] as $level)<option value="{{ $level }}" @selected(request('level') === $level)>{{ ucfirst($level) }}</option>@endforeach</select></div>
+        <x-workspace-search name="stage" label="Stage prefix" placeholder="oauth, sync, api"/>
+        <x-workspace-search name="outcome" label="Outcome" placeholder="ok, failed, skipped"/>
       </div>
-
-      <div class="filter-group">
-        <label class="filter-label">
-          <span>Severity Level</span>
-          <span class="filter-hint">Log Level</span>
-        </label>
-        <select name="level">
-          <option value="">Any level</option>
-          @foreach(['info','warning','error'] as $l)
-            <option value="{{ $l }}" @selected(request('level')===$l)>{{ ucfirst($l) }}</option>
-          @endforeach
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <label class="filter-label">
-          <span>Stage Prefix</span>
-          <span class="filter-hint">Subsystem</span>
-        </label>
-        <input name="stage" value="{{ request('stage') }}" placeholder="e.g. oauth, sync, api">
-      </div>
-
-      <div class="filter-group">
-        <label class="filter-label">
-          <span>Outcome</span>
-          <span class="filter-hint">Result</span>
-        </label>
-        <input name="outcome" value="{{ request('outcome') }}" placeholder="e.g. ok, failed, skipped">
-      </div>
-    </div>
-
-    <div class="filter-bar-footer">
-      <div class="filter-buttons">
-        <button class="btn primary" type="submit">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <span>Search Logs</span>
-        </button>
-        <a class="btn" href="{{ route('admin.logs') }}">Reset</a>
-      </div>
-      <div class="muted" style="font-size:12px">
-        Showing <strong>{{ $events->firstItem() ?? 0 }}–{{ $events->lastItem() ?? 0 }}</strong> of <strong>{{ number_format($events->total()) }}</strong> events
-      </div>
-    </div>
-  </form>
-</div>
-
-<div class="table-card">
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Correlation</th>
-          <th>Store / Record</th>
-          <th>Stage</th>
-          <th>Location</th>
-          <th>Outcome</th>
-          <th>HTTP</th>
-          <th>Attempts</th>
-          <th>Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        @forelse($events as $e)
-        @php
-          $stagePrefix = explode('.', $e->stage)[0] ?? '';
-          $stageClass = match($stagePrefix) {
-            'api' => 'stage-api',
-            'oauth' => 'stage-oauth',
-            'sync' => 'stage-sync',
-            'eligibility' => 'stage-eligibility',
-            default => '',
-          };
-        @endphp
-        <tr>
-          <td style="white-space:nowrap;font-weight:600;color:var(--text-title)">{{ $e->created_at?->format('m-d H:i:s') }}</td>
-          <td title="{{ $e->correlation_id }}">
-            @if($e->correlation_id)
-              <a class="card-mono" href="?q={{ $e->correlation_id }}">{{ substr($e->correlation_id,0,8) }}</a>
-            @else
-              <span class="muted">—</span>
-            @endif
-          </td>
-          <td class="mono">
-            @if($e->store_id)
-              <span class="store-id-pill">#{{ $e->store_id }}</span>
-            @endif
-            @if($e->source_record_id)
-              <span class="muted" style="font-size:11px">rec:{{ $e->source_record_id }}</span>
-            @endif
-            @if(!$e->store_id && !$e->source_record_id)
-              <span class="muted">—</span>
-            @endif
-          </td>
-          <td><span class="terminal-stage-badge {{ $stageClass }}">{{ $e->stage }}</span></td>
-          <td class="mono">{{ $e->ghl_location_id ? \Illuminate\Support\Str::limit($e->ghl_location_id, 12) : '—' }}</td>
-          <td>@if($e->outcome)<x-badge :value="$e->outcome"/>@else<span class="muted">—</span>@endif</td>
-          <td class="mono">
-            @if($e->http_status)
-              <span class="badge {{ $e->http_status < 400 ? 'b-ok' : 'b-bad' }}">{{ $e->http_status }}</span>
-            @else
-              <span class="muted">—</span>
-            @endif
-          </td>
-          <td class="mono">{{ $e->retry_count ?: '—' }}</td>
-          <td style="max-width:420px">
-            <div style="color:var(--text-title);font-weight:500">{{ $e->message }}</div>
-            @if($e->context)
-              <details>
-                <summary>Inspect payload context</summary>
-                <pre>{{ json_encode($e->context, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES) }}</pre>
-              </details>
-            @endif
-          </td>
-        </tr>
-        @empty
-        <tr>
-          <td colspan="9">
-            <div class="empty-state-box">
-              <div class="empty-state-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-              </div>
-              <div class="empty-state-text">No integration events match your criteria</div>
-              <p class="muted" style="font-size:12.5px;margin-top:4px">Try broadening your search filters or resetting the query.</p>
-            </div>
-          </td>
-        </tr>
-        @endforelse
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div class="pagination-wrapper">
-  <div class="pager">{{ $events->links() }}</div>
-</div>
+      <div class="workspace-filter-footer"><div><button class="admin-action admin-action-primary" type="submit"><span>Search logs</span></button><a class="admin-action" href="{{ route('admin.logs') }}">Reset all</a></div><p>Select a correlation ID to follow its execution trace.</p></div>
+    </form>
+    <div class="workspace-panel-head"><div><h2 id="workspace-results" tabindex="-1">Event stream</h2><p>Newest events first · All times in UTC</p></div><span class="workspace-count">{{ number_format($events->total()) }} events</span></div>
+    <div class="workspace-table-wrap"><table class="workspace-table workspace-table--events"><caption class="workspace-sr-only">Integration events, outcomes and execution context</caption><thead><tr><th scope="col">Recorded · UTC</th><th scope="col">Event / message</th><th scope="col">Branch / location</th><th scope="col">Outcome</th><th scope="col">Execution trace</th></tr></thead><tbody>
+      @forelse($events as $event)<tr>
+        <td data-label="Recorded · UTC"><x-workspace-time :value="$event->created_at"/><span class="workspace-id">Event {{ $event->id }}</span></td>
+        <th scope="row" data-label="Event / message" class="workspace-event-main"><span class="workspace-id">{{ $event->stage }}</span><strong>{{ $event->message }}</strong>@if($event->context)<details class="workspace-disclosure"><summary>Sanitized context</summary><pre>{{ json_encode($event->context, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES) }}</pre></details>@endif</th>
+        <td data-label="Branch / location"><strong>{{ $event->store_id ? 'Store '.$event->store_id : 'No store recorded' }}</strong>@if($event->source_record_id)<span class="workspace-note">Record {{ $event->source_record_id }}</span>@endif @if($event->ghl_location_id)<span class="workspace-id">Location {{ $event->ghl_location_id }}</span>@endif</td>
+        <td data-label="Outcome"><div class="workspace-badges"><x-badge :value="$event->level ?? 'info'"/>@if($event->outcome)<x-badge :value="$event->outcome"/>@endif</div><p class="workspace-note">{{ $event->http_status ? 'HTTP '.$event->http_status : 'No HTTP response recorded' }}</p><span class="workspace-note">{{ $event->retry_count ?? 0 }} retries</span></td>
+        <td data-label="Execution trace">@if($event->correlation_id)<a class="workspace-link workspace-mono" href="{{ route('admin.logs', ['q' => $event->correlation_id]) }}">{{ $event->correlation_id }}</a>@else<span class="workspace-note">No correlation ID</span>@endif</td>
+      </tr>@empty<tr class="workspace-empty-row"><td colspan="5"><x-workspace-empty :title="$filtered ? 'No events match these filters' : 'No integration events yet'" :description="$filtered ? 'Broaden the search or remove a filter to see more events.' : 'Events will appear as the integration runs.'" :reset="$filtered ? route('admin.logs') : null"/></td></tr>@endforelse
+    </tbody></table></div>
+    <footer class="workspace-pagination"><p>{{ $events->firstItem() ?? 0 }}–{{ $events->lastItem() ?? 0 }} of {{ number_format($events->total()) }} events</p><div class="pager">{{ $events->links() }}</div></footer>
+  </section>
+</x-admin-workspace>
 @endsection

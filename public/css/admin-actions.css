@@ -3,10 +3,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  min-height: var(--admin-control-height);
   padding: 10px 15px;
   border: 1px solid var(--border-medium);
-  border-radius: 11px;
+  border-radius: var(--admin-control-radius);
   color: var(--text-title);
   background: var(--clay-hi);
   font: 700 12px/1.4 var(--font-sans);
